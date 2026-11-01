@@ -252,6 +252,26 @@ export function RuecklageSheet({ id, onSchliessen }: Basis & { id?: string }) {
   );
 }
 
+/** Nur den Abbuchungstag eines Postens eintragen (schneller als der ganze Posten). */
+export function AbbuchungstagSheet({ id, onSchliessen }: Basis & { id: string }) {
+  const { daten } = useDaten();
+  const f = daten.fixkosten.find((x) => x.id === id);
+  const z = f?.zeitplan;
+  const [tag, setTag] = useState<number | null>(typeof z?.tag === 'number' ? z.tag : z?.ankerDatum ? Number(z.ankerDatum.slice(8, 10)) : null);
+  if (!f || !z) return null;
+  const sichern = () => speichere('fixkosten', { ...f, zeitplan: z.rhythmus === 'woechentlich' ? z : { ...z, tag, ankerDatum: null, ankerMonat: z.ankerMonat ?? (z.ankerDatum ? Number(z.ankerDatum.slice(5, 7)) : null) } }, `${f.name}: Tag gespeichert`);
+  return (
+    <FormSheet titel={f.name} onSchliessen={onSchliessen} gueltig={tag !== null && tag >= 1 && tag <= 31} sichern={sichern}>
+      <div className="gruppe">
+        <ZahlFeld label="Tag im Monat" min={1} max={31} wert={tag} onChange={setTag} />
+      </div>
+      <p className="gruppe-fuss">
+        Fällt der Tag auf ein Wochenende oder einen Bankfeiertag, rechnet die App mit dem nächsten Bankarbeitstag. Betrag: <Betrag wert={aktuellerBetrag(f.preise)} />.
+      </p>
+    </FormSheet>
+  );
+}
+
 /** Stand eines Spartopfs eintragen (z. B. nach einer Entnahme). Bucht nichts, merkt sich nur den Stand. */
 export function TopfSheet({ kontoId, schluessel, onSchliessen }: Basis & { kontoId: string; schluessel: string }) {
   const { roh } = useDaten();

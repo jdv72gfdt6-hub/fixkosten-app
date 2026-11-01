@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fixkostenKonto, jahreszahlungen, kontoRuecklage, sparKonto, spartoepfe } from './ruecklagen';
+import { fixkostenKonto, jahreszahlungen, kontoRuecklage, monatsAbbuchungen, sparKonto, spartoepfe } from './ruecklagen';
 import { neuerFixkostenPosten, zeitplan } from './standard';
 import { LEERE_DATEN, type Daten, type Konto } from './typen';
 
@@ -70,6 +70,28 @@ describe('Rücklagen für Jahreszahlungen', () => {
     expect(r.soll).toBe(5400 + 13965 + 3672 + 6300);
     expect(r.offenBisEingang).toBe(5500); // Strom am 05.11., nächster Eingang 01.12.
     expect(r.spielraum).toBe(30000 - 5500 - 29337);
+  });
+
+  it('Kontostand läuft weiter: Eingänge und Abbuchungen an ihren Tagen', () => {
+    const d = daten();
+    d.kontostaende = [{ id: 's', kontoId: 'c24', datum: '2026-11-02', betrag: 30000, quelle: 'manuell' }];
+    const nov = kontoRuecklage(d, 'c24', '2026-11-10');
+    expect(nov.saldoHeute).toBe(30000 - 5500); // Strom am 05.11. abgebucht
+    expect(nov.seitStand).toEqual({ ein: 0, aus: 5500 });
+    expect(nov.offenBisEingang).toBe(0);
+    const dez = kontoRuecklage(d, 'c24', '2026-12-02');
+    // + 400 € am 01.12., − Unfallversicherung 167,58 € am 01.12.; Strom erst am 07.12. (05.12. ist Samstag)
+    expect(dez.saldoHeute).toBe(30000 - 5500 + 40000 - 16758);
+    expect(dez.offenBisEingang).toBe(5500);
+  });
+
+  it('Monatsabbuchungen mit Datum und Status', () => {
+    const a = monatsAbbuchungen(daten(), 'c24', '2026-12-06');
+    expect(a).toHaveLength(1);
+    expect(a[0]!.posten.name).toBe('Strom');
+    expect(a[0]!.datum).toBe('2026-12-07');
+    expect(a[0]!.abgebucht).toBe(false);
+    expect(monatsAbbuchungen(daten(), 'c24', '2026-12-07')[0]!.abgebucht).toBe(true);
   });
 
   it('ohne Kontostand kein Spielraum', () => {

@@ -4,7 +4,7 @@
  * Reine Anzeige-Berechnungen: Nichts hier bucht oder verändert Daten.
  */
 import { MONATSABSTAND, monatlich } from './geld';
-import { plusMonate, plusTage, teile } from './datum';
+import { ersterDesMonats, letzterDesMonats, plusMonate, plusTage, teile } from './datum';
 import { naechsterTermin, termine, zeitplanProblem, type Termin } from './faelligkeiten';
 import { ereignisse } from './prognose';
 import { aktuellerBetrag, einkommenBetragAm, fixkostenAktivAm, letzterKontostand, ohnePapierkorb } from './posten';
@@ -67,11 +67,13 @@ export interface KontoRuecklage {
   rateMonatlich: Cent;
   /** Letzter eingetragener Kontostand (oder null). */
   stand: { betrag: Cent; datum: Tag } | null;
-  /** Monatliche Abbuchungen, die nach dem Stand noch vor dem nächsten Geldeingang kommen. */
+  /** Kontostand heute: eingetragener Stand + Eingänge − Abbuchungen seitdem (an ihren Tagen). */
+  saldoHeute: Cent | null;
+  /** Summe der Eingänge und Abbuchungen seit dem eingetragenen Stand. */
+  seitStand: { ein: Cent; aus: Cent };
+  /** Monatliche Abbuchungen, die nach heute noch vor dem nächsten Geldeingang kommen. */
   offenBisEingang: Cent;
-  /** Soll am Tag des Kontostands. */
-  sollAmStand: Cent;
-  /** Kontostand − offene Abbuchungen − Soll. Positiv = mehr da als nötig. null ohne Kontostand. */
+  /** Kontostand heute − offene Abbuchungen − Soll. Positiv = mehr da als nötig. null ohne Kontostand. */
   spielraum: Cent | null;
 }
 
@@ -81,27 +83,56 @@ export function kontoRuecklage(daten: Daten, kontoId: string, heute: Tag): Konto
   const soll = zahlungen.reduce((s, z) => s + z.angespart, 0);
   const rateMonatlich = zahlungen.reduce((s, z) => s + z.rate, 0);
   const letzter = letzterKontostand(ohnePapierkorb(daten), kontoId);
-  if (!letzter) return { zahlungen, soll, rateMonatlich, stand: null, offenBisEingang: 0, sollAmStand: soll, spielraum: null };
+  if (!letzter) return { zahlungen, soll, rateMonatlich, stand: null, saldoHeute: null, seitStand: { ein: 0, aus: 0 }, offenBisEingang: 0, spielraum: null };
 
-  const datum = letzter.datum;
-  const danach = ereignisse(daten, plusTage(datum, 1), plusMonate(datum, 2)).filter((e) => e.kontoId === kontoId);
-  const eingang = danach.find((e) => e.betrag > 0)?.datum ?? plusMonate(datum, 1);
+  // Der Stand enthält die Buchungen seines Tages; danach zählt jede Buchung an ihrem Tag.
+  const seit = letzter.datum < heute ? ereignisse(daten, plusTage(letzter.datum, 1), heute).filter((e) => e.kontoId === kontoId) : [];
+  const ein = seit.filter((e) => e.betrag > 0).reduce((s, e) => s + e.betrag, 0);
+  const aus = seit.filter((e) => e.betrag < 0).reduce((s, e) => s - e.betrag, 0);
+  const saldoHeute = letzter.betrag + ein - aus;
+
+  const danach = ereignisse(daten, plusTage(heute, 1), plusMonate(heute, 2)).filter((e) => e.kontoId === kontoId);
+  const eingang = danach.find((e) => e.betrag > 0)?.datum ?? plusMonate(heute, 1);
   const monatlicheIds = new Set(daten.fixkosten.filter((f) => f.zeitplan.rhythmus === 'monatlich' || f.zeitplan.rhythmus === 'woechentlich').map((f) => f.id));
-  const offenBisEingang = -danach
+  const offenBisEingang = danach
     .filter((e) => e.datum < eingang && e.betrag < 0 && e.art === 'fixkosten' && monatlicheIds.has(e.refId))
-    .reduce((s, e) => s + e.betrag, 0);
-  const sollAmStand = jahreszahlungen(daten, kontoId, datum).reduce((s, z) => s + z.angespart, 0);
+    .reduce((s, e) => s - e.betrag, 0);
   return {
     zahlungen,
     soll,
     rateMonatlich,
-    stand: { betrag: letzter.betrag, datum },
+    stand: { betrag: letzter.betrag, datum: letzter.datum },
+    saldoHeute,
+    seitStand: { ein, aus },
     offenBisEingang,
-    sollAmStand,
-    spielraum: letzter.betrag - offenBisEingang - sollAmStand,
+    spielraum: saldoHeute - offenBisEingang - soll,
   };
 }
 
+export interface MonatsAbbuchung {
+  posten: Fixkosten;
+  betrag: Cent;
+  /** Buchungstag in diesem Monat (auf Bankarbeitstag verschoben) oder null. */
+  datum: Tag | null;
+  /** Abbuchungstag fehlt – die App nimmt den 1. an. */
+  tagFehlt: boolean;
+  /** Datum liegt heute oder davor. */
+  abgebucht: boolean;
+}
+
+/** Monatliche Abbuchungen eines Kontos im laufenden Monat, nach Datum sortiert. */
+export function monatsAbbuchungen(daten: Daten, kontoId: string, heute: Tag): MonatsAbbuchung[] {
+  const { jahr, monat } = teile(heute);
+  const von = ersterDesMonats(jahr, monat);
+  const bis = letzterDesMonats(jahr, monat);
+  return ohnePapierkorb(daten)
+    .fixkosten.filter((f) => f.kontoId === kontoId && f.zeitplan.rhythmus === 'monatlich' && f.status !== 'pausiert' && fixkostenAktivAm(f, heute))
+    .map((f) => {
+      const t = termine(f.zeitplan, von, bis)[0] ?? null;
+      return { posten: f, betrag: aktuellerBetrag(f.preise), datum: t?.ist ?? null, tagFehlt: zeitplanProblem(f.zeitplan) === 'tag-fehlt', abgebucht: !!t && t.ist <= heute };
+    })
+    .sort((a, b) => (a.datum ?? '9').localeCompare(b.datum ?? '9') || b.betrag - a.betrag);
+}
 /* ------------------------------------------------------------ Spartöpfe */
 
 export type QuellenTyp = 'einkommen' | 'umbuchung' | 'sparplan' | 'fixkosten';

@@ -1,8 +1,7 @@
 import { Landmark } from 'lucide-react';
 import { useMemo } from 'react';
 import { formatMonat, formatTag, monatVon } from '../domain/datum';
-import { aktuellerBetrag } from '../domain/posten';
-import { fixkostenKonto, kontoRuecklage, type Jahreszahlung } from '../domain/ruecklagen';
+import { fixkostenKonto, kontoRuecklage, monatsAbbuchungen, type Jahreszahlung } from '../domain/ruecklagen';
 import { MONATSABSTAND } from '../domain/geld';
 import { heute, useDaten } from '../state/daten';
 import { useNav } from '../state/navigation';
@@ -28,27 +27,46 @@ export function KontoSeite() {
     );
   }
 
-  const monatlicheKosten = daten.fixkosten
-    .filter((f) => f.kontoId === konto.id && f.status === 'aktiv' && (f.zeitplan.rhythmus === 'monatlich' || f.zeitplan.rhythmus === 'woechentlich'))
-    .sort((a, c) => aktuellerBetrag(c.preise) - aktuellerBetrag(a.preise));
-  const summeMonatlich = monatlicheKosten.reduce((s, f) => s + aktuellerBetrag(f.preise), 0);
+  const abbuchungen = monatsAbbuchungen(roh, konto.id, h);
+  const summeMonatlich = abbuchungen.reduce((s, a) => s + a.betrag, 0);
+  const ohneTag = abbuchungen.filter((a) => a.tagFehlt).length + r.zahlungen.filter((z) => z.naechster?.angenommen).length;
 
   return (
     <Seite titel={konto.name}>
       <button type="button" className="karte konto-karte" onClick={() => zeige({ typ: 'kontostand', kontoId: konto.id })}>
-        <span className="karte-titel">Kontostand</span>
-        {r.stand ? (
+        <span className="karte-titel">Kontostand heute</span>
+        {r.stand && r.saldoHeute !== null ? (
           <>
             <span className="karte-zahl">
-              <Betrag wert={r.stand.betrag} />
+              <Betrag wert={r.saldoHeute} />
             </span>
-            <span className="karte-unter">Stand vom {formatTag(r.stand.datum)} · antippen zum Ändern</span>
+            {r.stand.datum < h ? (
+              <span className="karte-unter">
+                Dein Stand vom {formatTag(r.stand.datum)}: <Betrag wert={r.stand.betrag} />
+                {r.seitStand.ein || r.seitStand.aus ? (
+                  <>
+                    , seitdem{r.seitStand.ein > 0 && <> {'+ '}<Betrag wert={r.seitStand.ein} /> Eingang</>}
+                    {r.seitStand.aus > 0 && <> {'− '}<Betrag wert={r.seitStand.aus} /> Abbuchungen</>}.
+                  </>
+                ) : (
+                  ', seitdem keine Buchungen.'
+                )}{' '}
+                Antippen, um den echten Stand einzutragen.
+              </span>
+            ) : (
+              <span className="karte-unter">Eingetragen am {formatTag(r.stand.datum)} · antippen zum Ändern</span>
+            )}
           </>
         ) : (
           <span className="karte-unter">Noch nicht eingetragen · antippen zum Eintragen</span>
         )}
       </button>
 
+      {ohneTag > 0 && (
+        <p className="hinweis gelb">
+          Bei {ohneTag} {ohneTag === 1 ? 'Abbuchung fehlt' : 'Abbuchungen fehlt'} noch der Tag. Bis dahin rechnet die App mit dem 1. des Monats. Zum Eintragen unten antippen.
+        </p>
+      )}
       <div className="karte">
         <span className="karte-titel">Rücklage für Jahreszahlungen</span>
         <div className="kennzahlen">
@@ -80,7 +98,7 @@ export function KontoSeite() {
         )}
         {r.stand && (
           <p className="karte-fuss">
-            Kontostand vom {formatTag(r.stand.datum)} minus noch offene Monatsabbuchungen bis zum nächsten Geldeingang (<Betrag wert={r.offenBisEingang} />) minus Rücklage (<Betrag wert={r.sollAmStand} />).
+            Kontostand heute minus Abbuchungen, die bis zum nächsten Geldeingang noch kommen (<Betrag wert={r.offenBisEingang} />), minus Rücklage (<Betrag wert={r.soll} />).
           </p>
         )}
       </div>
@@ -92,12 +110,25 @@ export function KontoSeite() {
         ))}
       </Gruppe>
 
-      <Gruppe titel="Jeden Monat" fuss={<>Zusammen <Betrag wert={summeMonatlich} /> pro Monat.</>}>
-        {monatlicheKosten.map((f) => (
-          <Zeile key={f.id} titel={f.name} wert={<Betrag wert={aktuellerBetrag(f.preise)} />} onClick={() => zeige({ typ: 'fixkosten', id: f.id })} />
+      <Gruppe titel={`Jeden Monat · ${formatMonat(monatVon(h))}`} fuss={<>Zusammen <Betrag wert={summeMonatlich} /> pro Monat. Zum Ändern des Tages antippen.</>}>
+        {abbuchungen.map((a) => (
+          <Zeile
+            key={a.posten.id}
+            titel={a.posten.name}
+            unter={
+              a.tagFehlt ? (
+                <span className="abzeichen gelb">Tag fehlt</span>
+              ) : a.abgebucht ? (
+                <span>abgebucht am {formatTag(a.datum!)}</span>
+              ) : (
+                <span>wird am {formatTag(a.datum!)} abgebucht</span>
+              )
+            }
+            wert={<span className={a.abgebucht && !a.tagFehlt ? 'text-2' : undefined}><Betrag wert={a.betrag} /></span>}
+            onClick={() => zeige({ typ: 'abbuchungstag', id: a.posten.id })}
+          />
         ))}
-      </Gruppe>
-    </Seite>
+      </Gruppe>    </Seite>
   );
 }
 
@@ -106,7 +137,7 @@ function JahresZeile({ z }: { z: Jahreszahlung }) {
   const anteil = z.betrag > 0 ? Math.min(1, z.angespart / z.betrag) : 0;
   const abstand = MONATSABSTAND[z.posten.zeitplan.rhythmus as keyof typeof MONATSABSTAND];
   return (
-    <button type="button" className="zeile jahres-zeile" onClick={() => zeige({ typ: 'fixkosten', id: z.posten.id })}>
+    <button type="button" className="zeile jahres-zeile" onClick={() => zeige(z.monatFehlt ? { typ: 'fixkosten', id: z.posten.id } : { typ: 'abbuchungstag', id: z.posten.id })}>
       <span className="jahres-kopf">
         <span className="zeile-titel">{z.posten.name}</span>
         <span className="zahl">

@@ -17,6 +17,7 @@ export type Sheet =
   | { typ: 'ruecklage'; id?: string }
   | { typ: 'einmalig'; id?: string }
   | { typ: 'topf'; kontoId: string; schluessel: string }
+  | { typ: 'abbuchungstag'; id: string }
   | { typ: 'import' };
 
 interface NavStore {

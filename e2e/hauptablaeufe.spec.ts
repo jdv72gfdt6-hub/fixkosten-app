@@ -51,6 +51,19 @@ test('Fixkostenkonto: Kontostand eintragen und Rücklage für Jahreszahlungen se
   await expect(page.locator('.status')).toBeVisible();
 });
 
+test('Fixkostenkonto: Abbuchungstag eintragen, Kontostand läuft an den Tagen weiter', async ({ page }) => {
+  await mitTestdaten(page);
+  await tab(page, 'Fixkostenkonto');
+  await expect(page.locator('.konto-karte')).toContainText('Kontostand heute');
+  const monat = page.locator('section').filter({ has: page.getByRole('heading', { name: /^Jeden Monat/ }) });
+  const zeile = monat.locator('button.zeile').first();
+  const name = (await zeile.locator('.zeile-titel').textContent())!;
+  await zeile.click();
+  await page.getByLabel('Tag im Monat').fill('10');
+  await page.getByRole('button', { name: 'Sichern', exact: true }).click();
+  await expect(monat.locator('button.zeile', { hasText: name })).toContainText('wird am 10.11.2026 abgebucht');
+});
+
 test('Sparkonto: Stand je Eingang eintragen, Gesamtsumme', async ({ page }) => {
   await mitTestdaten(page);
   await tab(page, 'Tagesgeld');

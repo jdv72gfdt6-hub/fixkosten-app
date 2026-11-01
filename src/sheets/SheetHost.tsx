@@ -2,7 +2,7 @@ import { useNav } from '../state/navigation';
 import { FixkostenSheet } from './FixkostenSheet';
 import { ImportSheet } from './ImportSheet';
 import { NeuSheet } from './NeuSheet';
-import { BudgetSheet, EinkommenSheet, EinmaligSheet, KontoSheet, KontostandSheet, RuecklageSheet, SparplanSheet, TopfSheet, UmbuchungSheet } from './WeitereSheets';
+import { AbbuchungstagSheet, BudgetSheet, EinkommenSheet, EinmaligSheet, KontoSheet, KontostandSheet, RuecklageSheet, SparplanSheet, TopfSheet, UmbuchungSheet } from './WeitereSheets';
 
 /** Zeigt das oberste offene Bottom Sheet. */
 export function SheetHost() {
@@ -31,6 +31,8 @@ export function SheetHost() {
       return <RuecklageSheet key={key} id={sheet.id} onSchliessen={schliessen} />;
     case 'einmalig':
       return <EinmaligSheet key={key} id={sheet.id} onSchliessen={schliessen} />;
+    case 'abbuchungstag':
+      return <AbbuchungstagSheet key={key} id={sheet.id} onSchliessen={schliessen} />;
     case 'topf':
       return <TopfSheet key={key} kontoId={sheet.kontoId} schluessel={sheet.schluessel} onSchliessen={schliessen} />;
     case 'import':
