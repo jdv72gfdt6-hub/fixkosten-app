@@ -45,6 +45,10 @@ In `privat/` liegen außerdem die Tests mit deinen Kontrollwerten. `npm test` un
 
 Eine PWA braucht HTTPS. GitHub Pages liefert nur die App-Dateien aus, deine Daten bleiben trotzdem auf dem iPhone.
 
+**Am einfachsten:** im Projektordner auf **„Auf GitHub veroeffentlichen.cmd“** doppelklicken. Das Skript fragt nach deinem GitHub-Namen, öffnet die richtigen GitHub-Seiten, lädt alles hoch und schreibt am Ende den Link zur App in `APP-LINK.txt`.
+
+Von Hand geht es so:
+
 1. Auf <https://github.com/new> ein **neues Repository** anlegen, z. B. `fixkosten-app`. Es muss **öffentlich** sein, weil GitHub Pages im kostenlosen Tarif nur öffentliche Repositories veröffentlicht. Das ist unbedenklich: Im Repository liegt nur Code, deine Daten nicht.
 2. Im Projektordner:
    ```bash
