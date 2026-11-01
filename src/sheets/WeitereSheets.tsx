@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { inPapierkorb, speichere, type Tabelle } from '../db/aktionen';
 import { formatTag } from '../domain/datum';
 import { aktuellerBetrag, letzterKontostand } from '../domain/posten';
+import { spartoepfe } from '../domain/ruecklagen';
 import { neueId, zeitplan } from '../domain/standard';
 import type { Budget, Einkommen, Einmalig, Konto, KontoRolle, KontoTyp, Ruecklage, Sparplan, Umbuchung } from '../domain/typen';
 import { aendereEinstellungen, heute, useDaten } from '../state/daten';
@@ -247,6 +248,32 @@ export function RuecklageSheet({ id, onSchliessen }: Basis & { id?: string }) {
       </div>
       <p className="gruppe-fuss">{r.virtuell ? 'Ein virtueller Topf reserviert Geld auf dem Konto. Er zählt in der Deckungsprüfung als Abfluss, das Geld bleibt aber auf dem Konto.' : 'Auf einem eigenen Rücklagekonto ergibt sich der Monatsbetrag aus den eingehenden Umbuchungen.'}</p>
       {alt && <Loeschen tabelle="ruecklagen" id={r.id} name={r.name} onSchliessen={onSchliessen} />}
+    </FormSheet>
+  );
+}
+
+/** Stand eines Spartopfs eintragen (z. B. nach einer Entnahme). Bucht nichts, merkt sich nur den Stand. */
+export function TopfSheet({ kontoId, schluessel, onSchliessen }: Basis & { kontoId: string; schluessel: string }) {
+  const { roh } = useDaten();
+  const topf = spartoepfe(roh, kontoId, heute()).find((t) => t.schluessel === schluessel);
+  const [stand, setStand] = useState<number | null>(topf?.aktuell ?? null);
+  const [datum, setDatum] = useState<string | null>(heute());
+  if (!topf) return null;
+  const sichern = () =>
+    speichere(
+      'ruecklagen',
+      { ...(topf.eintrag ?? { id: neueId('r'), kontoId, virtuell: false, quelle: topf.quelle }), name: topf.name, stand: stand!, standAm: datum! },
+      `${topf.name} gespeichert`,
+    );
+  return (
+    <FormSheet titel={topf.name} onSchliessen={onSchliessen} gueltig={stand !== null && !!datum} sichern={sichern}>
+      <div className="gruppe">
+        <BetragFeld label="Stand" wert={stand} onChange={setStand} gross erlaubeLeer />
+        <DatumFeld label="Stand vom" wert={datum} onChange={setDatum} />
+      </div>
+      <p className="gruppe-fuss">
+        Ab diesem Tag kommen jeden Monat <Betrag wert={topf.monatlich} /> automatisch dazu. Es wird nichts gebucht.
+      </p>
     </FormSheet>
   );
 }

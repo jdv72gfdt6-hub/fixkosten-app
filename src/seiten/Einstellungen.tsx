@@ -10,19 +10,22 @@ import { testdaten } from '../domain/testdaten';
 import { LEERE_DATEN } from '../domain/typen';
 import { aendereEinstellungen, heute, useDaten } from '../state/daten';
 import { useNav } from '../state/navigation';
-import { AuswahlFeld, SchalterFeld, ZahlFeld } from '../ui/Felder';
-import { speichereDatei } from '../ui/hilfen';
+import { aktuellerBetrag } from '../domain/posten';
+import { fixkostenKonto, sparKonto } from '../domain/ruecklagen';
+import { Betrag } from '../ui/Betrag';
+import { AuswahlFeld, SchalterFeld } from '../ui/Felder';
+import { KONTO_ROLLE_NAMEN, speichereDatei } from '../ui/hilfen';
 import { Gruppe, Zeile } from '../ui/Liste';
 import { Seite } from '../ui/Seite';
 
 export async function backupHerunterladen() {
-  const b =erstelleBackup(await ladeDaten(), await ladeEinstellungen(), await db.abschluss.toArray());
+  const b = erstelleBackup(await ladeDaten(), await ladeEinstellungen(), await db.abschluss.toArray());
   speichereDatei(`fixkosten-backup-${heute()}.json`, JSON.stringify(b, null, 2), 'application/json');
   await aendereEinstellungen({ letztesBackup: heute() });
 }
 
-export function EinstellungenSeite() {
-  const { einstellungen, roh } = useDaten();
+export function EinstellungenSeite({ zurueck }: { zurueck: string }) {
+  const { einstellungen, roh, daten } = useDaten();
   const { oeffne, zeigeSheet } = useNav();
   const [dauerhaft, setDauerhaft] = useState<boolean | null>(null);
   const sicherungen = useLiveQuery(() => db.sicherungen.count()) ?? 0;
@@ -32,13 +35,34 @@ export function EinstellungenSeite() {
     void navigator.storage?.persisted?.().then(setDauerhaft);
   }, []);
 
+  const fixKonto = fixkostenKonto(daten, einstellungen.fixKontoId);
+  const spar = sparKonto(daten, einstellungen.sparKontoId, heute());
+  const kontoOptionen = daten.konten.map((k) => ({ wert: k.id, text: k.name }));
+
   const kalenderExport = () => {
     const termine = kalenderTermine(roh, heute());
     speichereDatei('fixkosten-fristen.ics', erzeugeIcs(termine), 'text/calendar');
   };
 
   return (
-    <Seite titel="Einstellungen">
+    <Seite titel="Einstellungen" zurueck={zurueck}>
+      <Gruppe titel="Seiten" fuss="Welches Konto die zweite und die dritte Seite unten zeigen.">
+        <AuswahlFeld label="Fixkostenkonto" wert={fixKonto?.id ?? ''} onChange={(fixKontoId) => void aendereEinstellungen({ fixKontoId })} optionen={kontoOptionen} />
+        <AuswahlFeld label="Sparkonto" wert={spar?.id ?? ''} onChange={(sparKontoId) => void aendereEinstellungen({ sparKontoId })} optionen={kontoOptionen} />
+      </Gruppe>
+
+      <Gruppe titel="Konten und Geldeingänge" aktion={{ text: 'Neu', onClick: () => zeigeSheet({ typ: 'neu' }) }}>
+        {daten.konten.map((k) => (
+          <Zeile key={k.id} titel={k.name} unter={KONTO_ROLLE_NAMEN[k.rolle]} onClick={() => zeigeSheet({ typ: 'konto', id: k.id })} />
+        ))}
+        {daten.einkommen.map((e) => (
+          <Zeile key={e.id} titel={e.name} unter={`Eingang auf ${daten.konten.find((k) => k.id === e.zielKontoId)?.name ?? '–'}`} wert={<Betrag wert={aktuellerBetrag(e.historie)} />} onClick={() => zeigeSheet({ typ: 'einkommen', id: e.id })} />
+        ))}
+        {daten.umbuchungen.map((u) => (
+          <Zeile key={u.id} titel={u.name || 'Umbuchung'} unter={`${daten.konten.find((k) => k.id === u.vonKontoId)?.name ?? '–'} → ${daten.konten.find((k) => k.id === u.nachKontoId)?.name ?? '–'}`} wert={<Betrag wert={u.betrag} />} onClick={() => zeigeSheet({ typ: 'umbuchung', id: u.id })} />
+        ))}
+      </Gruppe>
+
       <Gruppe titel="Darstellung">
         <AuswahlFeld
           label="Design"
@@ -51,11 +75,6 @@ export function EinstellungenSeite() {
           ]}
         />
         <SchalterFeld label="Beträge ausblenden" unter="Zeigt ••• € statt Beträgen, z. B. in der Öffentlichkeit." wert={einstellungen.betraegeAusblenden} onChange={(v) => void aendereEinstellungen({ betraegeAusblenden: v })} />
-      </Gruppe>
-
-      <Gruppe titel="Fixkostenquote" fuss="Ampel: grün unter Gelb-Grenze, gelb dazwischen, rot über Rot-Grenze.">
-        <ZahlFeld label="Gelb ab" einheit="%" max={100} wert={einstellungen.ampelGelb} onChange={(v) => v !== null && void aendereEinstellungen({ ampelGelb: v })} />
-        <ZahlFeld label="Rot über" einheit="%" max={100} wert={einstellungen.ampelRot} onChange={(v) => v !== null && void aendereEinstellungen({ ampelRot: v })} />
       </Gruppe>
 
       <Gruppe titel="Einordnung">

@@ -1,4 +1,4 @@
-import { ChevronLeft, MoreHorizontal, Plus, Search } from 'lucide-react';
+import { ChevronLeft, Plus, Settings } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNav } from '../state/navigation';
 
@@ -6,19 +6,19 @@ interface Props {
   titel: string;
   zurueck?: string;
   children: ReactNode;
-  /** Zusätzliche Knöpfe in der Glas-Kapsel oben rechts. */
-  kapsel?: ReactNode;
+  /** Plus-Knopf oben rechts (z. B. neuer Posten). */
+  plus?: { label: string; onClick: () => void };
   mitKapsel?: boolean;
 }
 
 /**
  * Seite mit großem Titel, der beim Scrollen in die Navigationsleiste wandert,
- * und schwebender Glas-Kapsel oben rechts (Suche, Hinzufügen, Mehr).
+ * und schwebender Glas-Kapsel oben rechts (Hinzufügen, Einstellungen).
  */
-export function Seite({ titel, zurueck, children, kapsel, mitKapsel = true }: Props) {
+export function Seite({ titel, zurueck, children, plus, mitKapsel = true }: Props) {
   const titelRef = useRef<HTMLHeadingElement>(null);
   const [eingeklappt, setEingeklappt] = useState(false);
-  const { zurueck: geheZurueck, zeigeSheet, wechsleTab } = useNav();
+  const { zurueck: geheZurueck, oeffne } = useNav();
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -42,17 +42,15 @@ export function Seite({ titel, zurueck, children, kapsel, mitKapsel = true }: Pr
           {titel}
         </span>
         <span className="abstand" />
-        {mitKapsel && (
+        {mitKapsel && !zurueck && (
           <div className="kapsel glas" role="toolbar" aria-label="Aktionen">
-            {kapsel}
-            <button type="button" aria-label="Suchen" onClick={() => zeigeSheet({ typ: 'suche' })}>
-              <Search size={20} />
-            </button>
-            <button type="button" aria-label="Hinzufügen" onClick={() => zeigeSheet({ typ: 'neu' })}>
-              <Plus size={22} />
-            </button>
-            <button type="button" aria-label="Mehr: Einstellungen" onClick={() => wechsleTab('einstellungen')}>
-              <MoreHorizontal size={22} />
+            {plus && (
+              <button type="button" aria-label={plus.label} onClick={plus.onClick}>
+                <Plus size={22} />
+              </button>
+            )}
+            <button type="button" aria-label="Einstellungen" onClick={() => oeffne({ typ: 'einstellungen' })}>
+              <Settings size={21} />
             </button>
           </div>
         )}

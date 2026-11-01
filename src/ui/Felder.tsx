@@ -56,7 +56,7 @@ export function BetragFeld({ label, wert, onChange, gross, erlaubeLeer, negativE
           id={id}
           className={gross ? 'betrag-gross' : 'zahl'}
           inputMode="decimal"
-          placeholder={erlaubeLeer ? 'optional' : '0,00'}
+          placeholder={erlaubeLeer && !gross ? 'optional' : '0,00'}
           value={text}
           aria-invalid={fehler}
           onChange={(e) => {

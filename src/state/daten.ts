@@ -2,13 +2,8 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { createContext, useContext, useMemo } from 'react';
 import { ladeDaten, ladeEinstellungen, speichereEinstellungen } from '../db/db';
-import { deckung, monatsuebersicht } from '../domain/bilanz';
+import { monatsuebersicht } from '../domain/bilanz';
 import { heute as heuteEcht, istTag } from '../domain/datum';
-import { prognose } from '../domain/prognose';
-import { anstehend } from '../domain/termine';
-import { baldKuendbar, preisaenderungen } from '../domain/vertraege';
-import { plusMonate } from '../domain/datum';
-import { luecken } from '../domain/vollstaendigkeit';
 import type { Daten, Einstellungen } from '../domain/typen';
 
 /** "Heute" – für Screenshots und Tests per ?heute=YYYY-MM-DD festlegbar. */
@@ -49,21 +44,11 @@ export async function aendereEinstellungen(teil: Partial<Einstellungen>): Promis
   await speichereEinstellungen({ ...alt, ...teil });
 }
 
-/** Alle Berechnungen, einmal pro Datenstand. */
+/** Berechnungen für die Fixkosten-Seite, einmal pro Datenstand. */
 export function useBerechnung() {
-  const { daten, roh, einstellungen } = useDaten();
+  const { daten, roh } = useDaten();
   return useMemo(() => {
     const h = heute();
-    return {
-      heute: h,
-      uebersicht: monatsuebersicht(roh, h),
-      deckung: deckung(roh, h),
-      prognose: prognose(roh, h, einstellungen.prognoseMonate),
-      anstehend: anstehend(roh, h, 60),
-      baldKuendbar: baldKuendbar(roh, h, 90),
-      preisaenderungen: preisaenderungen(roh, plusMonate(h, -12)),
-      luecken: luecken(roh, h),
-      daten,
-    };
-  }, [daten, roh, einstellungen.prognoseMonate]);
+    return { heute: h, uebersicht: monatsuebersicht(roh, h), daten };
+  }, [daten, roh]);
 }

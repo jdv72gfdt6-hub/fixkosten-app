@@ -238,7 +238,7 @@ function Ergebnis({ fertig }: { fertig: () => void }) {
       <p className="gruppe-fuss" style={{ marginTop: 12 }}>Fehlende Abbuchungstage werden vorsichtshalber am 1. des Monats angenommen. Trage sie nach, dann wird der Check genauer.</p>
       <div className="unten">
         <button type="button" className="knopf" onClick={fertig}>
-          Zur Übersicht
+          Zur App
         </button>
       </div>
     </div>

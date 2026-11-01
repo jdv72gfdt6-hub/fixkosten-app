@@ -40,7 +40,7 @@ export function migriere(daten: Record<string, unknown>, vonVersion: number, bis
 export const TABELLEN = Object.keys(LEERE_DATEN) as (keyof Daten)[];
 
 const BETRAGSFELDER = ['betrag', 'dispo', 'mindestpuffer', 'monatlich', 'ziel', 'stand', 'restschuld'];
-const TAGFELDER = ['datum', 'gueltigAb', 'endeAm', 'geprueftAm', 'beginn', 'letzteRate', 'ankerDatum', 'geloeschtAm'];
+const TAGFELDER = ['datum', 'gueltigAb', 'endeAm', 'geprueftAm', 'beginn', 'letzteRate', 'ankerDatum', 'geloeschtAm', 'standAm'];
 
 /** Prüft rekursiv, dass Beträge ganze Cent und Tage gültige Kalendertage sind. */
 function pruefeWerte(wert: unknown, pfad: string, fehler: string[]) {

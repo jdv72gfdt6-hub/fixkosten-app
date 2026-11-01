@@ -185,6 +185,10 @@ export interface Ruecklage {
   monatlich?: Cent;
   ziel?: Cent | null;
   stand?: Cent | null;
+  /** Tag, an dem der Stand galt. Spätere Eingänge der Quelle werden hinzugerechnet. */
+  standAm?: Tag | null;
+  /** Spartopf zu einem regelmäßigen Geldeingang (z. B. Kindergeld auf das Sparkonto). */
+  quelle?: { typ: 'einkommen' | 'umbuchung' | 'sparplan' | 'fixkosten'; id: string };
   lebensbereichId?: string;
   geloeschtAm?: Tag;
 }
@@ -231,6 +235,10 @@ export interface Einstellungen {
   letztesBackup?: Tag | null;
   onboardingFertig: boolean;
   zuletztGenutztesKontoId?: string;
+  /** Konto der Seite mit den Jahreszahlungs-Rücklagen (Standard: erstes Fixkostenkonto). */
+  fixKontoId?: string;
+  /** Konto der Seite "Sparen" (Standard: Trade Republic bzw. Konto mit den meisten Spar-Eingängen). */
+  sparKontoId?: string;
 }
 
 /** Alle fachlichen Daten in einem Objekt – Eingabe für alle Berechnungen. */

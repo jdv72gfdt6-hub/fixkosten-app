@@ -32,44 +32,31 @@ for (const schema of ['hell', 'dunkel'] as const) {
     await bild(page, '02-onboarding-kontostaende', schema);
     await page.getByRole('button', { name: 'Weiter' }).click();
     await bild(page, '03-onboarding-ruecklagen-check', schema);
-    await page.getByRole('button', { name: 'Zur Übersicht' }).click();
+    await page.getByRole('button', { name: /^Zur/ }).click();
 
-    const tab = (n: string) => page.getByRole('navigation').getByRole('button', { name: n }).click();
-    await expect(page.getByRole('heading', { name: 'Übersicht', level: 1 })).toBeVisible();
-    await bild(page, '04-uebersicht', schema);
+    const tab = (n: number) => page.getByRole('navigation').getByRole('button').nth(n).click();
+    await expect(page.locator('.kreis')).toBeVisible();
+    await bild(page, '04-fixkosten', schema);
 
-    await tab('Konten');
-    await bild(page, '05-konten', schema);
-    await page.locator('.zeile', { hasText: daten.konten.find((k) => k.rolle === 'fixkosten')!.name }).first().click();
-    await bild(page, '06-konto-detail', schema);
-    await page.getByRole('button', { name: /Konten$/ }).first().click();
-    await page.getByRole('button', { name: 'Geldfluss' }).click();
-    await bild(page, '07-geldfluss', schema);
+    await tab(1);
+    await bild(page, '05-fixkostenkonto', schema);
 
-    await tab('Kalender');
-    await bild(page, '08-kalender', schema);
-    await page.getByRole('button', { name: 'Monatsabschluss' }).click();
-    await bild(page, '09-monatsabschluss', schema);
+    await tab(2);
+    await bild(page, '06-sparen', schema);
 
-    await tab('Verträge');
-    await bild(page, '10-vertraege', schema);
-    await page.getByRole('button', { name: 'Bald kündbar' }).click();
-    await bild(page, '11-bald-kuendbar', schema);
+    await page.getByRole('button', { name: 'Einstellungen' }).click();
+    await bild(page, '07-einstellungen', schema);
 
-    await tab('Einstellungen');
-    await bild(page, '12-einstellungen', schema);
-
-    await page.getByRole('button', { name: 'Neuer Eintrag' }).click();
-    await page.getByRole('button', { name: /Fixkosten-Posten/ }).click();
+    await tab(0);
+    await page.getByRole('button', { name: 'Neuer Fixkosten-Posten' }).click();
     await page.waitForTimeout(400);
-    await page.screenshot({ path: `screenshots/${schema}/13-neuer-posten.png` });
+    await page.screenshot({ path: `screenshots/${schema}/08-neuer-posten.png` });
     await page.getByRole('button', { name: 'Abbrechen' }).click();
 
-    // Beispiel mit Kontoständen: Prognose und Warnungen (anonyme Testdaten)
+    // Beispiel mit Kontostand (anonyme Testdaten)
     await oeffneLeer(page);
     await page.getByRole('button', { name: /Mit Testdaten ausprobieren/ }).click();
-    await tab('Konten');
-    await page.locator('.zeile', { hasText: 'Fixkostenkonto' }).first().click();
-    await bild(page, '14-beispiel-prognose', schema);
+    await tab(1);
+    await bild(page, '09-beispiel-konto', schema);
   });
 }

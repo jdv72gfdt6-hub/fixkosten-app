@@ -5,6 +5,14 @@ Alle Daten bleiben auf deinem Gerät (IndexedDB). Es gibt keinen Server, kein Tr
 
 > Alle Berechnungen sind Orientierungshilfen und keine Finanz- oder Anlageberatung.
 
+Die App hat bewusst nur drei Seiten:
+
+- **Fixkosten**: alle Fixkosten mit Kreisdiagramm nach Kategorien.
+- **Fixkostenkonto** (z. B. C24): Kontostand, wie viel für Jahreszahlungen angespart sein sollte und wann sie abgebucht werden.
+- **Sparkonto** (z. B. Trade Republic): eine Summe je regelmäßigem Geldeingang und die Gesamtsumme.
+
+Nichts in der App bucht selbst Geld ab oder zu. Beträge ändern sich nur durch deine Eingaben.
+
 ---
 
 ## 1. Lokal starten

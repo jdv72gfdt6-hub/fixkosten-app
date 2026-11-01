@@ -14,10 +14,10 @@ for (const modus of ['hell', 'dunkel']) {
       return `<figure><div class="bild" style="background-image:url(data:image/png;base64,${b64})"></div><figcaption>${f.replace('.png', '').replace(/^\d+-/, '')}</figcaption></figure>`;
     })
     .join('');
-  const page = await browser.newPage({ viewport: { width: 1640, height: 800 } });
+  const page = await browser.newPage({ viewport: { width: 1400, height: 800 } });
   await page.setContent(`<style>
     body{margin:0;padding:24px;background:${modus === 'hell' ? '#e5e5ea' : '#2c2c2e'};font:600 15px system-ui;color:${modus === 'hell' ? '#000' : '#fff'}}
-    main{display:grid;grid-template-columns:repeat(7,1fr);gap:20px}
+    main{display:grid;grid-template-columns:repeat(5,1fr);gap:20px}
     figure{margin:0}.bild{width:100%;aspect-ratio:390/844;background-size:100% auto;background-repeat:no-repeat;border-radius:18px;box-shadow:0 4px 16px rgba(0,0,0,.25)}
     figcaption{margin-top:6px;text-align:center}
   </style><main>${kacheln}</main>`);
