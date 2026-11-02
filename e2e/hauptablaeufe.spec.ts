@@ -4,9 +4,9 @@ import { HEUTE, importiere, mitTestdaten, oeffneLeer, pruefeLayout } from './hil
 const summe = (page: Page) => page.locator('.kreis-mitte strong');
 const tab = (page: Page, name: string | RegExp) => page.getByRole('navigation').getByRole('button', { name }).click();
 
-test('Nur drei Tabs: Fixkosten, Fixkostenkonto, Sparkonto', async ({ page }) => {
+test('Vier Tabs: Fixkosten, Fixkostenkonto, Sparkonto, Konten', async ({ page }) => {
   await mitTestdaten(page);
-  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Fixkosten', 'Fixkostenkonto', 'Tagesgeld']);
+  await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Fixkosten', 'Fixkostenkonto', 'Tagesgeld', 'Konten']);
   await expect(summe(page)).toHaveText('1.511,80 €');
   await expect(page.locator('.legende li').first()).toContainText('Wohnen');
 });
@@ -73,6 +73,20 @@ test('Sparkonto: Stand je Eingang eintragen, Gesamtsumme', async ({ page }) => {
   await expect(page.locator('.karte-zahl')).toHaveText('600,00 €');
 });
 
+test('Konten: alle Konten mit Stand, Gesamtsumme', async ({ page }) => {
+  await mitTestdaten(page);
+  await tab(page, 'Konten');
+  const zeilen = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Konten' }) }).locator('button.zeile');
+  await expect(zeilen.first()).toBeVisible();
+  const anzahl = await zeilen.count();
+  await zeilen.first().click();
+  await page.getByLabel('Aktueller Stand').fill('1.000');
+  await page.getByRole('button', { name: 'Sichern' }).click();
+  await expect(zeilen.first()).toContainText('1.000,00 €');
+  await expect(zeilen).toHaveCount(anzahl);
+  await expect(page.locator('.karte-zahl')).not.toHaveText('–');
+});
+
 test('Löschen landet im Papierkorb und lässt sich rückgängig machen', async ({ page }) => {
   await mitTestdaten(page);
   await page.getByRole('button', { name: /^Musik/ }).click();
@@ -96,7 +110,7 @@ for (const groesse of ['100%', '170%']) {
   test(`Keine Überlappungen und kein Zoomen nötig bei Schriftgröße ${groesse}`, async ({ page }) => {
     await mitTestdaten(page);
     await page.addStyleTag({ content: `html { font-size: ${groesse} !important; }` });
-    for (const t of [/^Fixkostenkonto/, /^Tagesgeld/, /^Fixkosten$/]) {
+    for (const t of [/^Fixkostenkonto/, /^Tagesgeld/, /^Konten/, /^Fixkosten$/]) {
       await tab(page, t);
       await pruefeLayout(page);
     }

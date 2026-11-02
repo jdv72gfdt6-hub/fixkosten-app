@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fixkostenKonto, jahreszahlungen, kontoRuecklage, monatsAbbuchungen, sparKonto, spartoepfe } from './ruecklagen';
+import { fixkostenKonto, jahreszahlungen, kontenUebersicht, kontoRuecklage, monatsAbbuchungen, sparKonto, spartoepfe } from './ruecklagen';
 import { neuerFixkostenPosten, zeitplan } from './standard';
 import { LEERE_DATEN, type Daten, type Konto } from './typen';
 
@@ -116,6 +116,19 @@ describe('Spartöpfe', () => {
     expect(sparKonto(daten())?.id).toBe('tr');
     expect(fixkostenKonto(daten())?.id).toBe('c24');
     expect(sparKonto(daten(), 'giro')?.id).toBe('giro');
+  });
+
+  it('Kontenübersicht: Kontostand hochgerechnet, sonst Summe der Spartöpfe, sonst ohne Stand', () => {
+    const d = daten();
+    d.kontostaende = [{ id: 's', kontoId: 'c24', datum: '2026-11-02', betrag: 30000, quelle: 'manuell' }];
+    d.ruecklagen = [{ id: 'r', name: 'Kindergeld', kontoId: 'tr', virtuell: false, stand: 100000, standAm: '2026-11-02', quelle: { typ: 'einkommen', id: 'kg' } }];
+    const u = kontenUebersicht(d, '2026-11-10');
+    expect(u.zeilen.map((z) => z.konto.id)).toEqual(['giro', 'c24', 'tr']);
+    expect(u.zeilen[0]).toMatchObject({ saldo: null, herkunft: null });
+    expect(u.zeilen[1]).toMatchObject({ saldo: 30000 - 5500, herkunft: 'kontostand', standAm: '2026-11-02' });
+    expect(u.zeilen[2]).toMatchObject({ saldo: 100000, herkunft: 'spartoepfe', standAm: '2026-11-02' });
+    expect(u.gesamt).toBe(30000 - 5500 + 100000);
+    expect(u.ohneStand).toBe(1);
   });
 
   it('ohne Trade Republic: Konto mit den meisten Spar-Eingängen', () => {

@@ -1179,7 +1179,7 @@ button.zeile:active,
 
 /* ============================================================ Minimal-Ansicht (3 Tabs) */
 .tabbar {
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 .tab-text {
   max-width: 100%;

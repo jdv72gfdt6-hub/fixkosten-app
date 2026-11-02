@@ -1,7 +1,7 @@
 /* Einfache Stapel-Navigation pro Tab (wie UINavigationController) und offene Sheets. */
 import { create } from 'zustand';
 
-export type TabId = 'fixkosten' | 'konto' | 'sparen';
+export type TabId = 'fixkosten' | 'konto' | 'sparen' | 'konten';
 
 export type Route = { typ: 'einstellungen' } | { typ: 'papierkorb' } | { typ: 'kategorien-verwalten' };
 
@@ -31,7 +31,7 @@ interface NavStore {
   schliesseSheet: () => void;
 }
 
-const leer: Record<TabId, Route[]> = { fixkosten: [], konto: [], sparen: [] };
+const leer: Record<TabId, Route[]> = { fixkosten: [], konto: [], sparen: [], konten: [] };
 
 export const useNav = create<NavStore>((set) => ({
   tab: 'fixkosten',

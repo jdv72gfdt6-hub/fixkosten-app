@@ -1,4 +1,4 @@
-import { Landmark, PiggyBank, Receipt } from 'lucide-react';
+import { Landmark, PiggyBank, Receipt, Wallet } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 import { leerePapierkorb, speicherDauerhaft } from './db/db';
 import { ohnePapierkorb } from './domain/posten';
@@ -8,6 +8,7 @@ import { SheetHost } from './sheets/SheetHost';
 import { DatenKontext, heute, useDatenRoh } from './state/daten';
 import { useNav, type TabId } from './state/navigation';
 import { FixkostenSeite } from './seiten/FixkostenSeite';
+import { KontenSeite } from './seiten/KontenSeite';
 import { KontoSeite } from './seiten/KontoSeite';
 import { SparenSeite } from './seiten/SparenSeite';
 import { RueckgaengigToast, UpdateHinweis } from './ui/Toast';
@@ -59,6 +60,7 @@ export function App() {
     { id: 'fixkosten', text: 'Fixkosten', Icon: Receipt },
     { id: 'konto', text: fixkostenKonto(daten, einstellungen.fixKontoId)?.name ?? 'Konto', Icon: Landmark },
     { id: 'sparen', text: sparKonto(daten, einstellungen.sparKontoId, heute())?.name ?? 'Sparen', Icon: PiggyBank },
+    { id: 'konten', text: 'Konten', Icon: Wallet },
   ];
 
   return (
@@ -71,6 +73,7 @@ export function App() {
             {tab === 'fixkosten' && <FixkostenSeite />}
             {tab === 'konto' && <KontoSeite />}
             {tab === 'sparen' && <SparenSeite />}
+            {tab === 'konten' && <KontenSeite />}
           </>
         )}
 

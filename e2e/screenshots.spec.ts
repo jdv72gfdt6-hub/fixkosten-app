@@ -44,6 +44,9 @@ for (const schema of ['hell', 'dunkel'] as const) {
     await tab(2);
     await bild(page, '06-sparen', schema);
 
+    await tab(3);
+    await bild(page, '06b-konten', schema);
+
     await page.getByRole('button', { name: 'Einstellungen' }).click();
     await bild(page, '07-einstellungen', schema);
 

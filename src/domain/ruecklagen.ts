@@ -77,19 +77,32 @@ export interface KontoRuecklage {
   spielraum: Cent | null;
 }
 
+export interface KontoSaldo {
+  /** Letzter eingetragener Kontostand (oder null). */
+  stand: { betrag: Cent; datum: Tag } | null;
+  /** Eingetragener Stand + Eingänge − Abbuchungen seitdem (an ihren Tagen). */
+  saldoHeute: Cent | null;
+  seitStand: { ein: Cent; aus: Cent };
+}
+
+/** Kontostand heute, hochgerechnet vom letzten eingetragenen Stand. */
+export function kontoSaldo(daten: Daten, kontoId: string, heute: Tag): KontoSaldo {
+  const letzter = letzterKontostand(ohnePapierkorb(daten), kontoId);
+  if (!letzter) return { stand: null, saldoHeute: null, seitStand: { ein: 0, aus: 0 } };
+  // Der Stand enthält die Buchungen seines Tages; danach zählt jede Buchung an ihrem Tag.
+  const seit = letzter.datum < heute ? ereignisse(daten, plusTage(letzter.datum, 1), heute).filter((e) => e.kontoId === kontoId) : [];
+  const ein = seit.filter((e) => e.betrag > 0).reduce((s, e) => s + e.betrag, 0);
+  const aus = seit.filter((e) => e.betrag < 0).reduce((s, e) => s - e.betrag, 0);
+  return { stand: { betrag: letzter.betrag, datum: letzter.datum }, saldoHeute: letzter.betrag + ein - aus, seitStand: { ein, aus } };
+}
+
 /** Stand der Rücklagen für Jahreszahlungen auf einem Konto. */
 export function kontoRuecklage(daten: Daten, kontoId: string, heute: Tag): KontoRuecklage {
   const zahlungen = jahreszahlungen(daten, kontoId, heute);
   const soll = zahlungen.reduce((s, z) => s + z.angespart, 0);
   const rateMonatlich = zahlungen.reduce((s, z) => s + z.rate, 0);
-  const letzter = letzterKontostand(ohnePapierkorb(daten), kontoId);
-  if (!letzter) return { zahlungen, soll, rateMonatlich, stand: null, saldoHeute: null, seitStand: { ein: 0, aus: 0 }, offenBisEingang: 0, spielraum: null };
-
-  // Der Stand enthält die Buchungen seines Tages; danach zählt jede Buchung an ihrem Tag.
-  const seit = letzter.datum < heute ? ereignisse(daten, plusTage(letzter.datum, 1), heute).filter((e) => e.kontoId === kontoId) : [];
-  const ein = seit.filter((e) => e.betrag > 0).reduce((s, e) => s + e.betrag, 0);
-  const aus = seit.filter((e) => e.betrag < 0).reduce((s, e) => s - e.betrag, 0);
-  const saldoHeute = letzter.betrag + ein - aus;
+  const { stand, saldoHeute, seitStand } = kontoSaldo(daten, kontoId, heute);
+  if (!stand || saldoHeute === null) return { zahlungen, soll, rateMonatlich, stand: null, saldoHeute: null, seitStand, offenBisEingang: 0, spielraum: null };
 
   const danach = ereignisse(daten, plusTage(heute, 1), plusMonate(heute, 2)).filter((e) => e.kontoId === kontoId);
   const eingang = danach.find((e) => e.betrag > 0)?.datum ?? plusMonate(heute, 1);
@@ -101,9 +114,9 @@ export function kontoRuecklage(daten: Daten, kontoId: string, heute: Tag): Konto
     zahlungen,
     soll,
     rateMonatlich,
-    stand: { betrag: letzter.betrag, datum: letzter.datum },
+    stand,
     saldoHeute,
-    seitStand: { ein, aus },
+    seitStand,
     offenBisEingang,
     spielraum: saldoHeute - offenBisEingang - soll,
   };
@@ -181,6 +194,39 @@ function eingaengeSeit(daten: Daten, kontoId: string, refId: string, ab: Tag, bi
   return ereignisse(daten, plusTage(ab, 1), bis)
     .filter((e) => e.kontoId === kontoId && e.refId === refId && e.betrag > 0)
     .reduce((s, e) => s + e.betrag, 0);
+}
+
+/* ------------------------------------------------------------ Alle Konten */
+
+export interface KontoZeile {
+  konto: Konto;
+  /** Stand heute oder null, wenn nichts eingetragen ist. */
+  saldo: Cent | null;
+  /** Woher der Stand kommt: eingetragener Kontostand oder Summe der Spartöpfe. */
+  herkunft: 'kontostand' | 'spartoepfe' | null;
+  /** Datum des ältesten Eintrags, auf dem der Stand beruht. */
+  standAm: Tag | null;
+}
+
+/** Alle Konten mit ihrem heutigen Stand. Ohne Kontostand zählt die Summe der Spartöpfe, falls eingetragen. */
+export function kontenUebersicht(daten: Daten, heute: Tag): { zeilen: KontoZeile[]; gesamt: Cent; ohneStand: number } {
+  const zeilen = [...ohnePapierkorb(daten).konten]
+    .sort((a, b) => a.reihenfolge - b.reihenfolge)
+    .map((konto): KontoZeile => {
+      const s = kontoSaldo(daten, konto.id, heute);
+      if (s.stand && s.saldoHeute !== null) return { konto, saldo: s.saldoHeute, herkunft: 'kontostand', standAm: s.stand.datum };
+      const toepfe = spartoepfe(daten, konto.id, heute).filter((t) => t.aktuell !== null);
+      if (toepfe.length) {
+        const standAm = toepfe.map((t) => t.eintrag!.standAm!).sort()[0]!;
+        return { konto, saldo: toepfe.reduce((x, t) => x + t.aktuell!, 0), herkunft: 'spartoepfe', standAm };
+      }
+      return { konto, saldo: null, herkunft: null, standAm: null };
+    });
+  return {
+    zeilen,
+    gesamt: zeilen.reduce((s, z) => s + (z.saldo ?? 0), 0),
+    ohneStand: zeilen.filter((z) => z.saldo === null).length,
+  };
 }
 
 /** Konto für die Seite "Fixkosten-Konto": Einstellung, sonst das erste Konto mit Rolle Fixkosten. */
