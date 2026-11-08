@@ -1,95 +1,185 @@
-import { Landmark, PiggyBank, Receipt, Wallet } from 'lucide-react';
-import { useEffect, useMemo } from 'react';
-import { leerePapierkorb, speicherDauerhaft } from './db/db';
-import { ohnePapierkorb } from './domain/posten';
-import { fixkostenKonto, sparKonto } from './domain/ruecklagen';
-import { Onboarding } from './seiten/Onboarding';
-import { SheetHost } from './sheets/SheetHost';
-import { DatenKontext, heute, useDatenRoh } from './state/daten';
-import { useNav, type TabId } from './state/navigation';
-import { FixkostenSeite } from './seiten/FixkostenSeite';
-import { KontenSeite } from './seiten/KontenSeite';
-import { KontoSeite } from './seiten/KontoSeite';
-import { SparenSeite } from './seiten/SparenSeite';
-import { RueckgaengigToast, UpdateHinweis } from './ui/Toast';
-import { Unterseite } from './seiten/Unterseiten';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useRegisterSW } from 'virtual:pwa-register/react';
+import { db, speicherDauerhaft, speichereUnterkonto, uebernehmeAlteDaten, type Unterkonto } from './db';
+import { betragFuerEingabe, formatBetrag, parseBetrag, type Cent } from './geld';
+
+const ladeUnterkonten = () => db.unterkonten.orderBy('reihenfolge').toArray();
+
+const fokussiere = (id: string) => requestAnimationFrame(() => document.getElementById(id)?.focus());
 
 export function App() {
-  const roh = useDatenRoh();
-  const kontext = useMemo(
-    () => (roh ? { roh: roh.daten, daten: ohnePapierkorb(roh.daten), einstellungen: roh.einstellungen } : null),
-    [roh],
-  );
-  const { tab, wechsleTab, stapel } = useNav();
-  const route = stapel[tab].at(-1);
-  const design = roh?.einstellungen.design;
+  const [bereit, setBereit] = useState(false);
+  const konten = useLiveQuery(async () => (bereit ? await ladeUnterkonten() : undefined), [bereit]);
+  // Offen ist höchstens ein Formular: die ID eines Unterkontos oder "neu".
+  const [offen, setOffen] = useState<string | null>(null);
+  const [geloescht, setGeloescht] = useState<Unterkonto | null>(null);
 
   useEffect(() => {
     void speicherDauerhaft();
-    void leerePapierkorb();
+    uebernehmeAlteDaten()
+      .catch((e: unknown) => console.error('Übernahme fehlgeschlagen', e))
+      .finally(() => setBereit(true));
   }, []);
 
   useEffect(() => {
-    if (!design) return;
-    const root = document.documentElement;
-    if (design === 'hell') root.dataset.theme = 'light';
-    else if (design === 'dunkel') root.dataset.theme = 'dark';
-    else delete root.dataset.theme;
-    try {
-      localStorage.setItem('design', design);
-    } catch {
-      /* privater Modus – egal */
-    }
-  }, [design]);
+    if (!geloescht) return;
+    const t = setTimeout(() => setGeloescht(null), 6000);
+    return () => clearTimeout(t);
+  }, [geloescht]);
 
-  if (!kontext) return <div className="app" aria-busy="true" />;
+  if (!konten) return <main className="seite" aria-busy="true" />;
 
-  if (!kontext.einstellungen.onboardingFertig) {
-    return (
-      <DatenKontext.Provider value={kontext}>
-        <div className="app">
-          <Onboarding />
-          <SheetHost />
-        </div>
-      </DatenKontext.Provider>
-    );
-  }
+  const gesamt = konten.reduce((s, k) => s + k.stand, 0);
 
-  const { daten, einstellungen } = kontext;
-  const tabs: { id: TabId; text: string; Icon: typeof Receipt }[] = [
-    { id: 'fixkosten', text: 'Fixkosten', Icon: Receipt },
-    { id: 'konto', text: fixkostenKonto(daten, einstellungen.fixKontoId)?.name ?? 'Konto', Icon: Landmark },
-    { id: 'sparen', text: sparKonto(daten, einstellungen.sparKontoId, heute())?.name ?? 'Sparen', Icon: PiggyBank },
-    { id: 'konten', text: 'Konten', Icon: Wallet },
-  ];
+  const schliesse = (fokusId: string) => {
+    setOffen(null);
+    fokussiere(fokusId);
+  };
+  const sichere = async (k: { id?: string; name: string; stand: Cent }) => {
+    const id = await speichereUnterkonto(k);
+    schliesse(`zeile-${id}`);
+  };
+  const loesche = async (k: Unterkonto) => {
+    await db.unterkonten.delete(k.id);
+    setGeloescht(k);
+    schliesse('neu');
+  };
+  const stelleWiederHer = async () => {
+    if (!geloescht) return;
+    await db.unterkonten.put(geloescht);
+    setGeloescht(null);
+    fokussiere(`zeile-${geloescht.id}`);
+  };
 
   return (
-    <DatenKontext.Provider value={kontext}>
-      <div className="app">
-        {route ? (
-          <Unterseite key={JSON.stringify(route)} route={route} zurueck={tabs.find((t) => t.id === tab)!.text} />
-        ) : (
-          <>
-            {tab === 'fixkosten' && <FixkostenSeite />}
-            {tab === 'konto' && <KontoSeite />}
-            {tab === 'sparen' && <SparenSeite />}
-            {tab === 'konten' && <KontenSeite />}
-          </>
-        )}
+    <main className="seite">
+      <header className="kopf">
+        <h1>Trade Republic</h1>
+        <p className="summe">{formatBetrag(gesamt)}</p>
+        <p className="klein">Gesamtsumme</p>
+      </header>
 
-        <nav className="tabbar glas" aria-label="Hauptbereiche">
-          {tabs.map(({ id, text, Icon }) => (
-            <button key={id} type="button" className="tippbar" aria-current={tab === id ? 'page' : undefined} onClick={() => wechsleTab(id)}>
-              <Icon size={22} aria-hidden="true" />
-              <span className="tab-text">{text}</span>
-            </button>
+      {konten.length === 0 && offen !== 'neu' && <p className="leer">Noch keine Unterkonten. Lege dein erstes an.</p>}
+
+      {konten.length > 0 && (
+        <ul className="liste" aria-label="Unterkonten">
+          {konten.map((k) => (
+            <li key={k.id}>
+              {offen === k.id ? (
+                <Formular konto={k} onSichern={sichere} onAbbrechen={() => schliesse(`zeile-${k.id}`)} onLoeschen={() => loesche(k)} />
+              ) : (
+                <button type="button" id={`zeile-${k.id}`} className="zeile" onClick={() => setOffen(k.id)}>
+                  <span className="zeile-name">{k.name}</span>
+                  <span className="zeile-betrag">{formatBetrag(k.stand)}</span>
+                </button>
+              )}
+            </li>
           ))}
-        </nav>
+        </ul>
+      )}
 
-        <SheetHost />
-        <RueckgaengigToast />
+      {offen === 'neu' ? (
+        <div className="liste">
+          <Formular onSichern={sichere} onAbbrechen={() => schliesse('neu')} />
+        </div>
+      ) : (
+        <button type="button" id="neu" className="hinzufuegen" onClick={() => setOffen('neu')}>
+          Unterkonto hinzufügen
+        </button>
+      )}
+
+      <p className="klein fuss">Nur deine eigenen Eingaben, ohne Verbindung zu Trade Republic. Es wird nichts gebucht. Alle Daten bleiben auf diesem Gerät.</p>
+
+      <div className="hinweise">
+        {geloescht && (
+          <div className="hinweis" role="status">
+            <span>„{geloescht.name}“ gelöscht</span>
+            <button type="button" onClick={() => void stelleWiederHer()}>
+              Rückgängig
+            </button>
+          </div>
+        )}
         <UpdateHinweis />
       </div>
-    </DatenKontext.Provider>
+    </main>
+  );
+}
+
+function Formular({ konto, onSichern, onAbbrechen, onLoeschen }: {
+  konto?: Unterkonto;
+  onSichern: (k: { id?: string; name: string; stand: Cent }) => Promise<void>;
+  onAbbrechen: () => void;
+  onLoeschen?: () => Promise<void>;
+}) {
+  const [name, setName] = useState(konto?.name ?? '');
+  const [betrag, setBetrag] = useState(konto ? betragFuerEingabe(konto.stand) : '');
+  const [fehler, setFehler] = useState<{ name?: boolean; betrag?: boolean }>({});
+  const betragRef = useRef<HTMLInputElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const schluessel = konto?.id ?? 'neu';
+
+  useEffect(() => {
+    if (konto) betragRef.current?.select();
+    else nameRef.current?.focus();
+  }, []); // Nur beim Öffnen.
+
+  const absenden = (e: FormEvent) => {
+    e.preventDefault();
+    const stand = parseBetrag(betrag);
+    const nameFehlt = !name.trim();
+    const betragFalsch = stand === null || stand < 0;
+    setFehler({ name: nameFehlt, betrag: betragFalsch });
+    if (nameFehlt) nameRef.current?.focus();
+    else if (betragFalsch) betragRef.current?.focus();
+    else void onSichern({ id: konto?.id, name: name.trim(), stand: stand! });
+  };
+
+  return (
+    <form className="formular" onSubmit={absenden} noValidate>
+      <label htmlFor={`name-${schluessel}`}>Name</label>
+      <input id={`name-${schluessel}`} ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} maxLength={60} autoComplete="off" aria-invalid={!!fehler.name} aria-describedby={fehler.name ? `name-fehler-${schluessel}` : undefined} />
+      {fehler.name && <p className="fehler" id={`name-fehler-${schluessel}`}>Bitte einen Namen eingeben.</p>}
+
+      <label htmlFor={`betrag-${schluessel}`}>Stand in Euro</label>
+      <input id={`betrag-${schluessel}`} ref={betragRef} value={betrag} onChange={(e) => setBetrag(e.target.value)} inputMode="decimal" placeholder="0,00" autoComplete="off" aria-invalid={!!fehler.betrag} aria-describedby={fehler.betrag ? `betrag-fehler-${schluessel}` : undefined} />
+      {fehler.betrag && <p className="fehler" id={`betrag-fehler-${schluessel}`}>Bitte einen Betrag wie 1.234,56 eingeben.</p>}
+
+      <div className="knoepfe">
+        {onLoeschen && (
+          <button type="button" className="loeschen" onClick={() => void onLoeschen()}>
+            Löschen
+          </button>
+        )}
+        <span className="abstand" />
+        <button type="button" onClick={onAbbrechen}>
+          Abbrechen
+        </button>
+        <button type="submit" className="sichern">
+          Sichern
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** Hinweis, wenn eine neue Version der App bereitliegt. */
+function UpdateHinweis() {
+  const [verworfen, setVerworfen] = useState(false);
+  const {
+    needRefresh: [neu],
+    updateServiceWorker,
+  } = useRegisterSW({ immediate: true });
+  if (!neu || verworfen) return null;
+  return (
+    <div className="hinweis" role="status">
+      <span>Neue Version verfügbar</span>
+      <button type="button" onClick={() => void updateServiceWorker(true)}>
+        Aktualisieren
+      </button>
+      <button type="button" onClick={() => setVerworfen(true)}>
+        Später
+      </button>
+    </div>
   );
 }

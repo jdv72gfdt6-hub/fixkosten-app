@@ -7,9 +7,6 @@ const base = process.env.BASE_PATH ?? '/';
 
 export default defineConfig({
   base,
-  define: {
-    __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '1.0.0'),
-  },
   plugins: [
     react(),
     VitePWA({
@@ -17,9 +14,9 @@ export default defineConfig({
       injectRegister: false,
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Fixkosten',
-        short_name: 'Fixkosten',
-        description: 'Fixkosten und Konten im Blick – alle Daten bleiben auf dem Gerät.',
+        name: 'Unterkonten',
+        short_name: 'Unterkonten',
+        description: 'Ein Konto, mehrere Unterkonten, eine Gesamtsumme. Alle Daten bleiben auf dem Gerät.',
         lang: 'de',
         display: 'standalone',
         orientation: 'portrait',
@@ -42,8 +39,7 @@ export default defineConfig({
   // Eine Datei für alles ist bei einer Offline-PWA unkritisch (wird einmal gecacht).
   build: { chunkSizeWarningLimit: 1000 },
   test: {
-    // privat/ enthält die Kontrollwerte der persönlichen Startdaten (nicht im Repository).
-    include: ['src/**/*.test.ts', 'privat/**/*.test.ts'],
+    include: ['src/**/*.test.ts'],
     environment: 'node',
   },
 });

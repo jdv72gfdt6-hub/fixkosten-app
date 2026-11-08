@@ -5,9 +5,7 @@ import { defineConfig, devices } from '@playwright/test';
  * iPhone-Breite 390 px, WebKit-ähnliche Darstellung über Chromium.
  */
 export default defineConfig({
-  // privat/ enthält Tests mit den persönlichen Startdaten (nicht im Repository).
-  testDir: '.',
-  testMatch: ['e2e/**/*.spec.ts', 'privat/**/*.spec.ts'],
+  testDir: 'e2e',
   fullyParallel: false,
   workers: 1,
   reporter: [['list']],
