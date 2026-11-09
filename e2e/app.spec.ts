@@ -29,7 +29,7 @@ async function pruefeLayout(page: Page) {
     if (innerWidth !== breite) f.push(`Browser zoomt heraus (${innerWidth}px statt ${breite}px)`);
     if (document.documentElement.scrollWidth > innerWidth + 1) f.push(`horizontal scrollbar (${document.documentElement.scrollWidth}px)`);
     const schneidet = (a: DOMRect, b: DOMRect) => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1;
-    for (const z of document.querySelectorAll('.zeile, .knoepfe, .hinweis, .kopf')) {
+    for (const z of document.querySelectorAll('.zeile, .knoepfe, .hinweis, .kopf, .plusminus, .unten')) {
       const kinder = [...z.children].filter((c) => c.getBoundingClientRect().width > 0);
       for (let i = 0; i < kinder.length; i++)
         for (let j = i + 1; j < kinder.length; j++)
@@ -40,6 +40,12 @@ async function pruefeLayout(page: Page) {
       if (r.width && (r.right > innerWidth + 1 || r.left < -1)) f.push(`ragt heraus: ${el.className} "${el.textContent?.slice(0, 30)}"`);
       if (el instanceof HTMLElement && el.scrollWidth > el.clientWidth + 1 && el.clientWidth > 0 && !(el instanceof HTMLInputElement)) f.push(`abgeschnitten: ${el.className} "${el.textContent?.slice(0, 30)}"`);
     }
+    // Ganz unten gescrollt darf der Plus-Knopf nichts verdecken.
+    scrollTo(0, document.documentElement.scrollHeight);
+    const plus = document.querySelector('.plus')?.getBoundingClientRect();
+    for (const el of document.querySelectorAll('.kopf, .leer, .liste'))
+      if (plus && schneidet(plus, el.getBoundingClientRect())) f.push(`Plus-Knopf verdeckt: ${el.className}`);
+    scrollTo(0, 0);
     return f.slice(0, 10);
   }, breite);
   expect(fehler).toEqual([]);
@@ -50,7 +56,59 @@ test('Eine einzige Seite: leer, ohne Tabs und ohne Einstellungen', async ({ page
   await expect(summe(page)).toHaveText('0,00 €');
   await expect(page.getByText('Noch keine Unterkonten')).toBeVisible();
   await expect(page.getByRole('navigation')).toHaveCount(0);
-  await expect(page.getByRole('button')).toHaveText(['Unterkonto hinzufügen']);
+  await expect(page.getByRole('button')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Unterkonto hinzufügen' })).toBeVisible();
+  await expect(page.getByText('Es wird nichts gebucht')).toHaveCount(0);
+});
+
+test('Plus und Minus: Betrag dazurechnen und abziehen, rückgängig machbar', async ({ page }) => {
+  await oeffneLeer(page);
+  await neu(page, 'Rücklagen', '1.000');
+  await neu(page, 'Auto', '500');
+  const auto = zeilen(page).nth(1);
+  const aenderung = page.getByLabel('Betrag dazu oder weg');
+
+  await auto.click();
+  await expect(aenderung).toBeFocused();
+  await aenderung.fill('100');
+  await page.getByRole('button', { name: 'Dazurechnen' }).click();
+  await expect(auto).toContainText('600,00');
+  await expect(summe(page)).toHaveText('1.600,00 €');
+  await expect(page.getByRole('status')).toContainText('+100,00 € bei „Auto“');
+  await page.getByRole('button', { name: 'Rückgängig' }).click();
+  await expect(summe(page)).toHaveText('1.500,00 €');
+
+  await auto.click();
+  await aenderung.fill('25,50');
+  await page.getByRole('button', { name: 'Abziehen' }).click();
+  await expect(auto).toContainText('474,50');
+  await expect(page.getByRole('status')).toContainText('−25,50 € bei „Auto“');
+  await page.reload();
+  await expect(summe(page)).toHaveText('1.474,50 €');
+});
+
+test('Plus und Minus: falsche Eingaben ändern nichts', async ({ page }) => {
+  await oeffneLeer(page);
+  await neu(page, 'Auto', '500');
+  await zeilen(page).first().click();
+  const aenderung = page.getByLabel('Betrag dazu oder weg');
+  for (const falsch of ['', 'abc', '0', '-5']) {
+    await aenderung.fill(falsch);
+    await page.getByRole('button', { name: 'Dazurechnen' }).click();
+    await expect(page.getByText('Bitte einen Betrag wie 100 oder 25,50 eingeben.')).toBeVisible();
+  }
+  await aenderung.fill('500,01');
+  await page.getByRole('button', { name: 'Abziehen' }).click();
+  await expect(page.getByText('So viel ist nicht da. Stand: 500,00 €.')).toBeVisible();
+  // Enter allein sagt nicht, ob dazu oder weg.
+  await aenderung.fill('100');
+  await aenderung.press('Enter');
+  await page.getByRole('button', { name: 'Sichern' }).click();
+  await expect(page.getByText('Tippe auf + oder −')).toBeVisible();
+  await expect(summe(page)).toHaveText('500,00 €');
+  await aenderung.fill('500');
+  await page.getByRole('button', { name: 'Abziehen' }).click();
+  await expect(summe(page)).toHaveText('0,00 €');
 });
 
 test('Unterkonten anlegen: Die Gesamtsumme ist ihre Summe und bleibt nach dem Neuladen', async ({ page }) => {
@@ -150,7 +208,14 @@ for (const groesse of ['100%', '170%']) {
       await neu(page, 'Donaudampfschifffahrtsgesellschaftskapitänsmütze', '5');
       await pruefeLayout(page);
       await zeilen(page).first().click();
+      await page.getByRole('button', { name: 'Abziehen' }).click(); // Fehlermeldung sichtbar
       await pruefeLayout(page);
+      await page.getByLabel('Betrag dazu oder weg').fill('100');
+      await page.getByRole('button', { name: 'Dazurechnen' }).click();
+      await pruefeLayout(page); // Hinweis und Plus-Knopf gleichzeitig
+      for (let i = 1; i <= 6; i++) await neu(page, `Topf ${i}`, '10'); // Seite scrollt
+      await pruefeLayout(page);
+      await zeilen(page).first().click();
       await page.getByRole('button', { name: 'Löschen' }).click();
       await pruefeLayout(page);
     });
@@ -186,10 +251,13 @@ for (const schema of ['light', 'dark'] as const) {
     await neu(page, 'Urlaub', '320,50');
     await page.screenshot({ path: `screenshots/${schema}/2-liste.png` });
     await zeilen(page).nth(1).click();
+    await page.getByLabel('Betrag dazu oder weg').fill('100');
     await page.screenshot({ path: `screenshots/${schema}/3-bearbeiten.png` });
-    await page.getByRole('button', { name: 'Löschen' }).click();
-    await page.screenshot({ path: `screenshots/${schema}/4-geloescht.png` });
+    await page.getByRole('button', { name: 'Dazurechnen' }).click();
+    await page.screenshot({ path: `screenshots/${schema}/4-dazugerechnet.png` });
     await page.addStyleTag({ content: 'html { font-size: 170% !important; }' });
     await page.screenshot({ path: `screenshots/${schema}/5-grosse-schrift.png` });
+    await zeilen(page).nth(1).click();
+    await page.screenshot({ path: `screenshots/${schema}/6-grosse-schrift-bearbeiten.png`, fullPage: true });
   });
 }

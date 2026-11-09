@@ -138,19 +138,6 @@ h1 {
   white-space: nowrap;
 }
 
-.hinzufuegen {
-  display: block;
-  width: 100%;
-  min-height: 52px;
-  padding: 14px 16px;
-  border-radius: 12px;
-  background: var(--flaeche);
-  color: var(--akzent);
-  font-weight: 600;
-}
-.fuss {
-  margin: 20px 4px 0;
-}
 
 .formular {
   display: flex;
@@ -172,6 +159,31 @@ h1 {
   background: var(--bg);
   /* Unter 16 px zoomt iOS beim Antippen in die Seite. */
   font-size: max(16px, 1em);
+}
+.formular hr {
+  width: 100%;
+  margin: 8px 0 12px;
+  border: 0;
+  border-top: 0.5px solid var(--trenner);
+}
+.plusminus {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 52px;
+  align-items: start;
+  gap: 8px;
+}
+.plusminus input {
+  min-height: 52px;
+  text-align: center;
+}
+.plusminus button {
+  height: 52px;
+  border-radius: 12px;
+  background: var(--akzent-flaeche);
+  color: var(--akzent-auf);
+  font-size: 1.75rem;
+  font-weight: 500;
+  line-height: 1;
 }
 .formular input[aria-invalid='true'] {
   border-color: var(--rot);
@@ -195,6 +207,7 @@ h1 {
   color: var(--akzent);
 }
 .knoepfe .sichern {
+  margin-left: auto; /* bleibt rechts, auch wenn er bei großer Schrift umbricht */
   padding: 8px 16px;
   background: var(--akzent-flaeche);
   color: var(--akzent-auf);
@@ -208,18 +221,36 @@ h1 {
   flex: 1 1 0;
 }
 
-.hinweise {
+/* Hinweise stehen über dem Plus-Knopf, damit nichts überlappt. */
+.unten {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
   z-index: 10;
+  max-width: 640px;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   padding: 0 16px;
   pointer-events: none;
+}
+.plus {
+  align-self: flex-end;
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--akzent-flaeche);
+  color: var(--akzent-auf);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  pointer-events: auto;
+}
+.plus:active {
+  filter: brightness(0.9);
 }
 .hinweis {
   display: flex;
