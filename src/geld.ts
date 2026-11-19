@@ -53,10 +53,12 @@ export function formatBetrag(wert: Cent, kurz = false): string {
 
 const MONATE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
 
-/** "2027-06" → "Juni 2027". */
-export function formatMonat(monat: string): string {
+const MONATE_KURZ = ['Jan.', 'Feb.', 'März', 'Apr.', 'Mai', 'Juni', 'Juli', 'Aug.', 'Sep.', 'Okt.', 'Nov.', 'Dez.'];
+
+/** "2027-06" → "Juni 2027", mit `kurz` "2027-04" → "Apr. 2027". */
+export function formatMonat(monat: string, kurz = false): string {
   const [jahr, m] = monat.split('-');
-  return `${MONATE[Number(m) - 1] ?? m} ${jahr}`;
+  return `${(kurz ? MONATE_KURZ : MONATE)[Number(m) - 1] ?? m} ${jahr}`;
 }
 
 /** Vorbelegung eines Eingabefelds: "1234,56". */

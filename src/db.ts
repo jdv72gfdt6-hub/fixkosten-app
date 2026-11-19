@@ -22,6 +22,9 @@ export interface Spartopf extends Eintrag {
   ziel: Cent | null;
   /** Zielmonat "YYYY-MM", null ohne Datum. */
   bis: string | null;
+  /** Farbe und Symbol aus src/toepfe.tsx. Ältere Töpfe haben keine, dann gelten Vorgaben. */
+  farbe?: string;
+  symbol?: string;
 }
 
 interface Alt {

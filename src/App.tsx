@@ -1,19 +1,23 @@
 import { useLiveQuery } from 'dexie-react-hooks';
+import { Check } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { db, speicherDauerhaft, speichere, uebernehmeAlteDaten, type Eintrag, type Spartopf } from './db';
 import { betragFuerEingabe, formatBetrag, formatMonat, parseBetrag, type Cent } from './geld';
+import { FARBEN, farbeVon, farbStil, SYMBOLE, symbolVon, vorgabeFarbe } from './toepfe';
 
 type Seite = 'konto' | 'toepfe';
 type Tabelle = 'unterkonten' | 'spartoepfe';
 
-/** Was ein Formular speichert. Ziel und Datum gibt es nur bei Spartöpfen. */
+/** Was ein Formular speichert. Ziel, Datum, Farbe und Symbol gibt es nur bei Spartöpfen. */
 interface Werte {
   id?: string;
   name: string;
   stand: Cent;
   ziel: Cent | null;
   bis: string | null;
+  farbe: string;
+  symbol: string;
 }
 
 /** Letzte Änderung zum Rückgängigmachen: der Eintrag, wie er vorher war. */
@@ -31,6 +35,10 @@ const TEXTE = {
 const lade = <T extends Eintrag>(tabelle: Tabelle) => db.table<T, string>(tabelle).orderBy('reihenfolge').toArray();
 
 const fokussiere = (id: string) => requestAnimationFrame(() => document.getElementById(id)?.focus());
+
+const istTopf = (e: Eintrag): e is Spartopf => 'ziel' in e;
+const zielErreicht = (e: Eintrag) => istTopf(e) && !!e.ziel && e.stand >= e.ziel;
+const prozent = (t: Spartopf) => Math.floor(Math.min(1, Math.max(0, t.stand / t.ziel!)) * 100);
 
 export function App() {
   const [bereit, setBereit] = useState(false);
@@ -57,7 +65,7 @@ export function App() {
   if (!konten || !toepfe) return <main className="seite" aria-busy="true" />;
 
   const tabelle: Tabelle = seite === 'konto' ? 'unterkonten' : 'spartoepfe';
-  const eintraege: (Eintrag | Spartopf)[] = seite === 'konto' ? konten : toepfe;
+  const eintraege: Eintrag[] = seite === 'konto' ? konten : toepfe;
   const texte = TEXTE[seite];
   const gesamt = eintraege.reduce((s, e) => s + e.stand, 0);
 
@@ -95,6 +103,27 @@ export function App() {
     fokussiere(`zeile-${letzte.vorher.id}`);
   };
 
+  const liste = (eintraegeDerListe: Eintrag[], label: string) => (
+    <ul className={`liste${seite === 'toepfe' ? ' topf-liste' : ''}`} aria-label={label}>
+      {eintraegeDerListe.map((e) => (
+        <li key={e.id}>
+          {offen === e.id ? (
+            <Formular topf={seite === 'toepfe'} eintrag={e} onSichern={sichere} onVerbuchen={(b) => verbuche(e, b)} onAbbrechen={() => schliesse(`zeile-${e.id}`)} onLoeschen={() => loesche(e)} />
+          ) : istTopf(e) ? (
+            <TopfZeile topf={e} onClick={() => oeffne(e.id)} />
+          ) : (
+            <button type="button" id={`zeile-${e.id}`} className="zeile" onClick={() => oeffne(e.id)}>
+              <span className="zeile-name">{e.name}</span>
+              <span className="zeile-betrag">{formatBetrag(e.stand)}</span>
+            </button>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+  const laufend = eintraege.filter((e) => !zielErreicht(e));
+  const erreicht = eintraege.filter(zielErreicht);
+
   return (
     <main className="seite">
       <nav className="umschalter" aria-label="Seiten">
@@ -114,28 +143,19 @@ export function App() {
 
       {eintraege.length === 0 && offen !== 'neu' && <p className="leer">{texte.leer}</p>}
 
-      {eintraege.length > 0 && (
-        <ul className="liste" aria-label={texte.liste}>
-          {eintraege.map((e) => (
-            <li key={e.id}>
-              {offen === e.id ? (
-                <Formular topf={seite === 'toepfe'} eintrag={e} onSichern={sichere} onVerbuchen={(b) => verbuche(e, b)} onAbbrechen={() => schliesse(`zeile-${e.id}`)} onLoeschen={() => loesche(e)} />
-              ) : (
-                <button type="button" id={`zeile-${e.id}`} className="zeile" onClick={() => oeffne(e.id)}>
-                  <span className="zeile-name">{e.name}</span>
-                  <span className="zeile-betrag">{formatBetrag(e.stand)}</span>
-                  {'ziel' in e && <TopfFortschritt topf={e} />}
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+      {laufend.length > 0 && liste(laufend, texte.liste)}
 
       {offen === 'neu' && (
         <div className="liste">
-          <Formular topf={seite === 'toepfe'} onSichern={sichere} onAbbrechen={() => schliesse('neu')} />
+          <Formular topf={seite === 'toepfe'} vorgabeFarbe={vorgabeFarbe(toepfe.length)} onSichern={sichere} onAbbrechen={() => schliesse('neu')} />
         </div>
+      )}
+
+      {erreicht.length > 0 && (
+        <>
+          <h2 className="gruppe-kopf">Erreicht</h2>
+          {liste(erreicht, 'Erreicht')}
+        </>
       )}
 
       <div className="unten">
@@ -169,41 +189,58 @@ function zieleText(toepfe: Spartopf[]): string {
   return `Ziele zusammen ${formatBetrag(ziele, true)} · ${Math.floor((erreicht / ziele) * 100)} % erreicht`;
 }
 
-function TopfFortschritt({ topf: t }: { topf: Spartopf }) {
-  const bis = t.bis ? `bis ${formatMonat(t.bis)}` : '';
-  if (!t.ziel) return bis ? <span className="zeile-details klein">{bis}</span> : null;
-  const fertig = t.stand >= t.ziel;
-  const anteil = Math.min(1, Math.max(0, t.stand / t.ziel));
+function TopfZeile({ topf: t, onClick }: { topf: Spartopf; onClick: () => void }) {
+  const fertig = zielErreicht(t);
+  const farbe = fertig ? 'gruen' : farbeVon(t);
+  const { Icon } = symbolVon(t);
+  const bis = t.bis ? `bis ${formatMonat(t.bis, true)}` : '';
   return (
-    <span className="zeile-details">
-      <span className={`balken${fertig ? ' voll' : ''}`} aria-hidden="true">
-        <span style={{ width: `${Math.floor(anteil * 100)}%` }} />
+    <button type="button" id={`zeile-${t.id}`} className="zeile topf" style={farbStil(farbe)} onClick={onClick}>
+      <span className="topf-symbol" aria-hidden="true">
+        {fertig ? <Check size={24} strokeWidth={2.5} /> : <Icon size={24} strokeWidth={2} />}
       </span>
-      {fertig ? (
-        <span className="erreicht">✓ Ziel von {formatBetrag(t.ziel, true)} erreicht</span>
-      ) : (
-        <span className="klein">
-          von {formatBetrag(t.ziel, true)} · noch {formatBetrag(t.ziel - t.stand, true)} <span className="am-stueck">{bis}</span>
+      <span className="topf-inhalt">
+        <span className="topf-kopf">
+          <span className="topf-name">{t.name}</span>
+          {t.ziel ? <span className="topf-prozent">{prozent(t)} %</span> : null}
         </span>
-      )}
-    </span>
+        <span className="topf-betrag">
+          <strong>{formatBetrag(t.stand, true)}</strong>
+          {t.ziel ? <span className="topf-von"> von {formatBetrag(t.ziel, true)}</span> : null}
+        </span>
+        {t.ziel ? (
+          <span className="balken" aria-hidden="true">
+            <span style={{ width: `${prozent(t)}%` }} />
+          </span>
+        ) : null}
+        {bis && !fertig && (
+          <span className="topf-unter">
+            {t.ziel ? <>Noch {formatBetrag(t.ziel - t.stand, true)} · </> : null}
+            <span className="am-stueck">{bis}</span>
+          </span>
+        )}
+      </span>
+    </button>
   );
 }
 
-function Formular({ topf, eintrag, onSichern, onVerbuchen, onAbbrechen, onLoeschen }: {
+function Formular({ topf, eintrag, vorgabeFarbe: vorgabe, onSichern, onVerbuchen, onAbbrechen, onLoeschen }: {
   topf: boolean;
-  eintrag?: Eintrag | Spartopf;
+  eintrag?: Eintrag;
+  vorgabeFarbe?: string;
   onSichern: (w: Werte) => Promise<void>;
   onVerbuchen?: (betrag: Cent) => Promise<void>;
   onAbbrechen: () => void;
   onLoeschen?: () => Promise<void>;
 }) {
-  const alt = eintrag && 'ziel' in eintrag ? eintrag : undefined;
+  const alt = eintrag && istTopf(eintrag) ? eintrag : undefined;
   const [aenderung, setAenderung] = useState('');
   const [name, setName] = useState(eintrag?.name ?? '');
   const [betrag, setBetrag] = useState(eintrag ? betragFuerEingabe(eintrag.stand) : '');
   const [ziel, setZiel] = useState(alt?.ziel ? betragFuerEingabe(alt.ziel) : '');
   const [bis, setBis] = useState(alt?.bis ?? '');
+  const [farbe, setFarbe] = useState(alt ? farbeVon(alt) : (vorgabe ?? FARBEN[0].id));
+  const [symbol, setSymbol] = useState(alt ? symbolVon(alt).id : SYMBOLE[0]!.id);
   const [fehler, setFehler] = useState<{ aenderung?: string; name?: boolean; betrag?: boolean; ziel?: boolean }>({});
   const aenderungRef = useRef<HTMLInputElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
@@ -243,7 +280,7 @@ function Formular({ topf, eintrag, onSichern, onVerbuchen, onAbbrechen, onLoesch
     if (f.name) nameRef.current?.focus();
     else if (f.betrag) betragRef.current?.focus();
     else if (f.ziel) zielRef.current?.focus();
-    else void onSichern({ id: eintrag?.id, name: name.trim(), stand: stand!, ziel: zielWert, bis: bis || null });
+    else void onSichern({ id: eintrag?.id, name: name.trim(), stand: stand!, ziel: zielWert, bis: bis || null, farbe, symbol });
   };
 
   const feld = (id: string, fehlt: boolean | undefined) => ({ id: `${id}-${s}`, 'aria-invalid': !!fehlt, 'aria-describedby': fehlt ? `${id}-fehler-${s}` : undefined });
@@ -293,6 +330,29 @@ function Formular({ topf, eintrag, onSichern, onVerbuchen, onAbbrechen, onLoesch
 
           <label htmlFor={`bis-${s}`}>Bis wann (freiwillig)</label>
           <input id={`bis-${s}`} type="month" value={bis} onChange={(e) => setBis(e.target.value)} />
+
+          <fieldset className="auswahl">
+            <legend>Symbol</legend>
+            <div className="auswahl-reihe">
+              {SYMBOLE.map(({ id, name: symbolName, Icon }) => (
+                <label key={id} className="wahl wahl-symbol" style={farbStil(farbe)}>
+                  <input type="radio" name={`symbol-${s}`} value={id} checked={symbol === id} onChange={() => setSymbol(id)} aria-label={symbolName} />
+                  <Icon size={24} aria-hidden="true" />
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <fieldset className="auswahl">
+            <legend>Farbe</legend>
+            <div className="auswahl-reihe">
+              {FARBEN.map(({ id, name: farbName }) => (
+                <label key={id} className="wahl wahl-farbe" style={farbStil(id)}>
+                  <input type="radio" name={`farbe-${s}`} value={id} checked={farbe === id} onChange={() => setFarbe(id)} aria-label={farbName} />
+                </label>
+              ))}
+            </div>
+          </fieldset>
         </>
       )}
 

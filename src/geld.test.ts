@@ -41,6 +41,8 @@ describe('Beträge', () => {
     expect(formatBetrag(150050, true)).toBe('1.500,50 €');
     expect(formatMonat('2027-06')).toBe('Juni 2027');
     expect(formatMonat('2026-12')).toBe('Dezember 2026');
+    expect(formatMonat('2027-04', true)).toBe('Apr. 2027');
+    expect(formatMonat('2027-03', true)).toBe('März 2027');
   });
 
   it('Eingabewert lässt sich wieder einlesen', () => {

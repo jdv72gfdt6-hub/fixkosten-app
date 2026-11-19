@@ -9,9 +9,25 @@
   --akzent-flaeche: #007aff;
   --akzent-auf: #ffffff;
   --rot: #c4000f;
-  --gruen: #1f7a35;
-  --gruen-flaeche: #34c759;
   --flaeche-2: #e5e5ea;
+
+  /* Topf-Farben: Fläche für Balken, -text für Schrift und Symbole (WCAG AA auf Weiß) */
+  --f-blau: #007aff;
+  --f-blau-text: #0063cc;
+  --f-gelb: #f5b800;
+  --f-gelb-text: #8a5d00;
+  --f-tuerkis: #30b0c7;
+  --f-tuerkis-text: #00717f;
+  --f-orange: #ff9500;
+  --f-orange-text: #a85a00;
+  --f-lila: #5856d6;
+  --f-lila-text: #4b49c2;
+  --f-gruen: #34c759;
+  --f-gruen-text: #1f7a35;
+  --f-pink: #ff2d55;
+  --f-pink-text: #c4002b;
+  --f-grau: #8e8e93;
+  --f-grau-text: #5c5c61;
   --hinweis: #2c2c2e;
   --hinweis-text: #ffffff;
   --hinweis-akzent: #64b0ff;
@@ -27,9 +43,23 @@
     --akzent: #409cff;
     --akzent-flaeche: #0a84ff;
     --rot: #ff6961;
-    --gruen: #30d158;
-    --gruen-flaeche: #30d158;
     --flaeche-2: #2c2c2e;
+    --f-blau: #0a84ff;
+    --f-blau-text: #409cff;
+    --f-gelb: #ffd60a;
+    --f-gelb-text: #ffd60a;
+    --f-tuerkis: #40c8e0;
+    --f-tuerkis-text: #5fd4e7;
+    --f-orange: #ff9f0a;
+    --f-orange-text: #ffb340;
+    --f-lila: #5e5ce6;
+    --f-lila-text: #9d9bff;
+    --f-gruen: #30d158;
+    --f-gruen-text: #30d158;
+    --f-pink: #ff375f;
+    --f-pink-text: #ff6482;
+    --f-grau: #98989d;
+    --f-grau-text: #aeaeb2;
     --hinweis: #3a3a3c;
   }
 }
@@ -159,38 +189,141 @@ h1 {
   flex: 0 1 auto;
   min-width: 0;
 }
-/* Fortschritt eines Spartopfs: eigene Zeile unter Name und Betrag. */
-.zeile-details {
+/* ---------- Spartöpfe: Symbol links, rechts Name/Prozent, Betrag, Balken, "Noch … bis …" */
+.topf-liste li + li {
+  border-top: 0;
+}
+.zeile.topf {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px;
+}
+.topf-symbol {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 1.4em;
+  color: var(--farbe-text);
+}
+.topf-inhalt {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  flex: 1 0 100%;
-  margin-top: 8px;
+  gap: 4px;
+}
+.topf-kopf {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0 12px;
+}
+.topf-name {
+  min-width: 0;
+  font-weight: 600;
+}
+.topf-prozent {
+  margin-left: auto;
+  color: var(--farbe-text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.topf-betrag {
+  font-variant-numeric: tabular-nums;
+}
+.topf-betrag strong {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.topf-von,
+.topf-unter {
+  color: var(--text-2);
+  font-size: 0.875rem;
+}
+.topf-von {
+  white-space: nowrap;
 }
 .balken {
   display: block;
-  height: 8px;
-  border-radius: 4px;
+  height: 6px;
+  margin: 6px 0 2px;
+  border-radius: 3px;
   background: var(--flaeche-2);
   overflow: hidden;
 }
 .balken > span {
   display: block;
   height: 100%;
-  border-radius: 4px;
-  background: var(--akzent-flaeche);
+  border-radius: 3px;
+  background: var(--farbe);
 }
-.balken.voll > span {
-  background: var(--gruen-flaeche);
-}
-/* "bis Juni 2027" nicht mitten im Datum umbrechen */
+/* "bis Apr. 2027" nicht mitten im Datum umbrechen */
 .am-stueck {
   white-space: nowrap;
 }
-.erreicht {
-  color: var(--gruen);
+.gruppe-kopf {
+  margin: 24px 16px 8px;
+  color: var(--text-2);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Auswahl von Symbol und Farbe im Formular */
+.auswahl {
+  margin: 4px 0 8px;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.auswahl legend {
+  margin-bottom: 8px;
+  padding: 0;
+  color: var(--text-2);
   font-size: 0.875rem;
-  font-weight: 600;
+}
+.auswahl-reihe {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.wahl {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.wahl input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.wahl-symbol {
+  background: var(--bg);
+  color: var(--farbe-text);
+}
+.wahl-farbe::after {
+  content: '';
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--farbe);
+}
+.wahl:has(input:checked) {
+  box-shadow: inset 0 0 0 2.5px var(--farbe-text);
+}
+.wahl:has(input:focus-visible) {
+  outline: 2px solid var(--akzent-flaeche);
+  outline-offset: 2px;
 }
 .zeile-betrag {
   margin-left: auto;
