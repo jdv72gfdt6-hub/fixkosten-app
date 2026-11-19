@@ -1,23 +1,43 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
-import { db, speicherDauerhaft, speichereUnterkonto, uebernehmeAlteDaten, type Unterkonto } from './db';
-import { betragFuerEingabe, formatBetrag, parseBetrag, type Cent } from './geld';
+import { db, speicherDauerhaft, speichere, uebernehmeAlteDaten, type Eintrag, type Spartopf } from './db';
+import { betragFuerEingabe, formatBetrag, formatMonat, parseBetrag, type Cent } from './geld';
 
-const ladeUnterkonten = () => db.unterkonten.orderBy('reihenfolge').toArray();
+type Seite = 'konto' | 'toepfe';
+type Tabelle = 'unterkonten' | 'spartoepfe';
+
+/** Was ein Formular speichert. Ziel und Datum gibt es nur bei Spartöpfen. */
+interface Werte {
+  id?: string;
+  name: string;
+  stand: Cent;
+  ziel: Cent | null;
+  bis: string | null;
+}
+
+/** Letzte Änderung zum Rückgängigmachen: der Eintrag, wie er vorher war. */
+interface Rueckgaengig {
+  text: string;
+  tabelle: Tabelle;
+  vorher: Eintrag;
+}
+
+const TEXTE = {
+  konto: { titel: 'Trade Republic', liste: 'Unterkonten', leer: 'Noch keine Unterkonten. Lege mit + dein erstes an.', neu: 'Unterkonto hinzufügen' },
+  toepfe: { titel: 'Spartöpfe', liste: 'Spartöpfe', leer: 'Noch keine Spartöpfe. Lege mit + deinen ersten an.', neu: 'Spartopf hinzufügen' },
+};
+
+const lade = <T extends Eintrag>(tabelle: Tabelle) => db.table<T, string>(tabelle).orderBy('reihenfolge').toArray();
 
 const fokussiere = (id: string) => requestAnimationFrame(() => document.getElementById(id)?.focus());
 
-/** Letzte Änderung zum Rückgängigmachen: das Unterkonto, wie es vorher war. */
-interface Rueckgaengig {
-  text: string;
-  vorher: Unterkonto;
-}
-
 export function App() {
   const [bereit, setBereit] = useState(false);
-  const konten = useLiveQuery(async () => (bereit ? await ladeUnterkonten() : undefined), [bereit]);
-  // Offen ist höchstens ein Formular: die ID eines Unterkontos oder "neu".
+  const [seite, setSeite] = useState<Seite>('konto');
+  const konten = useLiveQuery(async () => (bereit ? await lade<Eintrag>('unterkonten') : undefined), [bereit]);
+  const toepfe = useLiveQuery(async () => (bereit ? await lade<Spartopf>('spartoepfe') : undefined), [bereit]);
+  // Offen ist höchstens ein Formular: die ID eines Eintrags oder "neu".
   const [offen, setOffen] = useState<string | null>(null);
   const [letzte, setLetzte] = useState<Rueckgaengig | null>(null);
 
@@ -34,10 +54,17 @@ export function App() {
     return () => clearTimeout(t);
   }, [letzte]);
 
-  if (!konten) return <main className="seite" aria-busy="true" />;
+  if (!konten || !toepfe) return <main className="seite" aria-busy="true" />;
 
-  const gesamt = konten.reduce((s, k) => s + k.stand, 0);
+  const tabelle: Tabelle = seite === 'konto' ? 'unterkonten' : 'spartoepfe';
+  const eintraege: (Eintrag | Spartopf)[] = seite === 'konto' ? konten : toepfe;
+  const texte = TEXTE[seite];
+  const gesamt = eintraege.reduce((s, e) => s + e.stand, 0);
 
+  const wechsle = (s: Seite) => {
+    setOffen(null);
+    setSeite(s);
+  };
   // Ein offenes Formular soll weder vom Hinweis noch vom Plus-Knopf verdeckt werden.
   const oeffne = (id: string) => {
     setLetzte(null);
@@ -47,47 +74,57 @@ export function App() {
     setOffen(null);
     fokussiere(fokusId);
   };
-  const sichere = async (k: { id?: string; name: string; stand: Cent }) => {
-    const id = await speichereUnterkonto(k);
+  const sichere = async (w: Werte) => {
+    const id = seite === 'konto' ? await speichere(db.unterkonten, { id: w.id, name: w.name, stand: w.stand }) : await speichere(db.spartoepfe, w);
     schliesse(`zeile-${id}`);
   };
-  const verbuche = async (k: Unterkonto, betrag: Cent) => {
-    await db.unterkonten.update(k.id, { stand: k.stand + betrag });
-    setLetzte({ text: `${betrag > 0 ? '+' : ''}${formatBetrag(betrag)} bei „${k.name}“`, vorher: k });
-    schliesse(`zeile-${k.id}`);
+  const verbuche = async (e: Eintrag, betrag: Cent) => {
+    await db.table(tabelle).update(e.id, { stand: e.stand + betrag });
+    setLetzte({ text: `${betrag > 0 ? '+' : ''}${formatBetrag(betrag)} bei „${e.name}“`, tabelle, vorher: e });
+    schliesse(`zeile-${e.id}`);
   };
-  const loesche = async (k: Unterkonto) => {
-    await db.unterkonten.delete(k.id);
-    setLetzte({ text: `„${k.name}“ gelöscht`, vorher: k });
+  const loesche = async (e: Eintrag) => {
+    await db.table(tabelle).delete(e.id);
+    setLetzte({ text: `„${e.name}“ gelöscht`, tabelle, vorher: e });
     schliesse('neu');
   };
   const machRueckgaengig = async () => {
     if (!letzte) return;
-    await db.unterkonten.put(letzte.vorher);
+    await db.table(letzte.tabelle).put(letzte.vorher);
     setLetzte(null);
     fokussiere(`zeile-${letzte.vorher.id}`);
   };
 
   return (
     <main className="seite">
+      <nav className="umschalter" aria-label="Seiten">
+        <button type="button" aria-current={seite === 'konto' ? 'page' : undefined} onClick={() => wechsle('konto')}>
+          Konto
+        </button>
+        <button type="button" aria-current={seite === 'toepfe' ? 'page' : undefined} onClick={() => wechsle('toepfe')}>
+          Spartöpfe
+        </button>
+      </nav>
+
       <header className="kopf">
-        <h1>Trade Republic</h1>
+        <h1>{texte.titel}</h1>
         <p className="summe">{formatBetrag(gesamt)}</p>
-        <p className="klein">Gesamtsumme</p>
+        <p className="klein">{seite === 'konto' ? 'Gesamtsumme' : zieleText(toepfe)}</p>
       </header>
 
-      {konten.length === 0 && offen !== 'neu' && <p className="leer">Noch keine Unterkonten. Lege mit + dein erstes an.</p>}
+      {eintraege.length === 0 && offen !== 'neu' && <p className="leer">{texte.leer}</p>}
 
-      {konten.length > 0 && (
-        <ul className="liste" aria-label="Unterkonten">
-          {konten.map((k) => (
-            <li key={k.id}>
-              {offen === k.id ? (
-                <Formular konto={k} onSichern={sichere} onVerbuchen={(b) => verbuche(k, b)} onAbbrechen={() => schliesse(`zeile-${k.id}`)} onLoeschen={() => loesche(k)} />
+      {eintraege.length > 0 && (
+        <ul className="liste" aria-label={texte.liste}>
+          {eintraege.map((e) => (
+            <li key={e.id}>
+              {offen === e.id ? (
+                <Formular topf={seite === 'toepfe'} eintrag={e} onSichern={sichere} onVerbuchen={(b) => verbuche(e, b)} onAbbrechen={() => schliesse(`zeile-${e.id}`)} onLoeschen={() => loesche(e)} />
               ) : (
-                <button type="button" id={`zeile-${k.id}`} className="zeile" onClick={() => oeffne(k.id)}>
-                  <span className="zeile-name">{k.name}</span>
-                  <span className="zeile-betrag">{formatBetrag(k.stand)}</span>
+                <button type="button" id={`zeile-${e.id}`} className="zeile" onClick={() => oeffne(e.id)}>
+                  <span className="zeile-name">{e.name}</span>
+                  <span className="zeile-betrag">{formatBetrag(e.stand)}</span>
+                  {'ziel' in e && <TopfFortschritt topf={e} />}
                 </button>
               )}
             </li>
@@ -97,7 +134,7 @@ export function App() {
 
       {offen === 'neu' && (
         <div className="liste">
-          <Formular onSichern={sichere} onAbbrechen={() => schliesse('neu')} />
+          <Formular topf={seite === 'toepfe'} onSichern={sichere} onAbbrechen={() => schliesse('neu')} />
         </div>
       )}
 
@@ -112,7 +149,7 @@ export function App() {
         )}
         <UpdateHinweis />
         {offen === null && (
-          <button type="button" id="neu" className="plus" aria-label="Unterkonto hinzufügen" onClick={() => oeffne('neu')}>
+          <button type="button" id="neu" className="plus" aria-label={texte.neu} onClick={() => oeffne('neu')}>
             <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
               <path d="M12 4v16M4 12h16" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
             </svg>
@@ -123,24 +160,59 @@ export function App() {
   );
 }
 
-function Formular({ konto, onSichern, onVerbuchen, onAbbrechen, onLoeschen }: {
-  konto?: Unterkonto;
-  onSichern: (k: { id?: string; name: string; stand: Cent }) => Promise<void>;
+/** Unter der Summe der Spartöpfe: wie weit alle Ziele zusammen erreicht sind. */
+function zieleText(toepfe: Spartopf[]): string {
+  const mitZiel = toepfe.filter((t) => t.ziel);
+  const ziele = mitZiel.reduce((s, t) => s + t.ziel!, 0);
+  if (!ziele) return 'Gesamtsumme';
+  const erreicht = mitZiel.reduce((s, t) => s + Math.min(Math.max(t.stand, 0), t.ziel!), 0);
+  return `Ziele zusammen ${formatBetrag(ziele, true)} · ${Math.floor((erreicht / ziele) * 100)} % erreicht`;
+}
+
+function TopfFortschritt({ topf: t }: { topf: Spartopf }) {
+  const bis = t.bis ? `bis ${formatMonat(t.bis)}` : '';
+  if (!t.ziel) return bis ? <span className="zeile-details klein">{bis}</span> : null;
+  const fertig = t.stand >= t.ziel;
+  const anteil = Math.min(1, Math.max(0, t.stand / t.ziel));
+  return (
+    <span className="zeile-details">
+      <span className={`balken${fertig ? ' voll' : ''}`} aria-hidden="true">
+        <span style={{ width: `${Math.floor(anteil * 100)}%` }} />
+      </span>
+      {fertig ? (
+        <span className="erreicht">✓ Ziel von {formatBetrag(t.ziel, true)} erreicht</span>
+      ) : (
+        <span className="klein">
+          von {formatBetrag(t.ziel, true)} · noch {formatBetrag(t.ziel - t.stand, true)} <span className="am-stueck">{bis}</span>
+        </span>
+      )}
+    </span>
+  );
+}
+
+function Formular({ topf, eintrag, onSichern, onVerbuchen, onAbbrechen, onLoeschen }: {
+  topf: boolean;
+  eintrag?: Eintrag | Spartopf;
+  onSichern: (w: Werte) => Promise<void>;
   onVerbuchen?: (betrag: Cent) => Promise<void>;
   onAbbrechen: () => void;
   onLoeschen?: () => Promise<void>;
 }) {
+  const alt = eintrag && 'ziel' in eintrag ? eintrag : undefined;
   const [aenderung, setAenderung] = useState('');
-  const [name, setName] = useState(konto?.name ?? '');
-  const [betrag, setBetrag] = useState(konto ? betragFuerEingabe(konto.stand) : '');
-  const [fehler, setFehler] = useState<{ aenderung?: string; name?: boolean; betrag?: boolean }>({});
+  const [name, setName] = useState(eintrag?.name ?? '');
+  const [betrag, setBetrag] = useState(eintrag ? betragFuerEingabe(eintrag.stand) : '');
+  const [ziel, setZiel] = useState(alt?.ziel ? betragFuerEingabe(alt.ziel) : '');
+  const [bis, setBis] = useState(alt?.bis ?? '');
+  const [fehler, setFehler] = useState<{ aenderung?: string; name?: boolean; betrag?: boolean; ziel?: boolean }>({});
   const aenderungRef = useRef<HTMLInputElement>(null);
-  const betragRef = useRef<HTMLInputElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
-  const schluessel = konto?.id ?? 'neu';
+  const betragRef = useRef<HTMLInputElement>(null);
+  const zielRef = useRef<HTMLInputElement>(null);
+  const s = eintrag?.id ?? 'neu';
 
   useEffect(() => {
-    if (konto) aenderungRef.current?.focus();
+    if (eintrag) aenderungRef.current?.focus();
     else nameRef.current?.focus();
   }, []); // Nur beim Öffnen.
 
@@ -148,8 +220,8 @@ function Formular({ konto, onSichern, onVerbuchen, onAbbrechen, onLoeschen }: {
     const b = parseBetrag(aenderung);
     if (b === null || b <= 0) {
       setFehler({ aenderung: 'Bitte einen Betrag wie 100 oder 25,50 eingeben.' });
-    } else if (vorzeichen < 0 && b > konto!.stand) {
-      setFehler({ aenderung: `So viel ist nicht da. Stand: ${formatBetrag(konto!.stand)}.` });
+    } else if (vorzeichen < 0 && b > eintrag!.stand) {
+      setFehler({ aenderung: `So viel ist nicht da. Stand: ${formatBetrag(eintrag!.stand)}.` });
     } else {
       void onVerbuchen!(vorzeichen * b);
       return;
@@ -165,25 +237,28 @@ function Formular({ konto, onSichern, onVerbuchen, onAbbrechen, onLoeschen }: {
       return;
     }
     const stand = parseBetrag(betrag);
-    const nameFehlt = !name.trim();
-    const betragFalsch = stand === null || stand < 0;
-    setFehler({ name: nameFehlt, betrag: betragFalsch });
-    if (nameFehlt) nameRef.current?.focus();
-    else if (betragFalsch) betragRef.current?.focus();
-    else void onSichern({ id: konto?.id, name: name.trim(), stand: stand! });
+    const zielWert = ziel.trim() ? parseBetrag(ziel) : null;
+    const f = { name: !name.trim(), betrag: stand === null || stand < 0, ziel: !!ziel.trim() && (zielWert === null || zielWert <= 0) };
+    setFehler(f);
+    if (f.name) nameRef.current?.focus();
+    else if (f.betrag) betragRef.current?.focus();
+    else if (f.ziel) zielRef.current?.focus();
+    else void onSichern({ id: eintrag?.id, name: name.trim(), stand: stand!, ziel: zielWert, bis: bis || null });
   };
+
+  const feld = (id: string, fehlt: boolean | undefined) => ({ id: `${id}-${s}`, 'aria-invalid': !!fehlt, 'aria-describedby': fehlt ? `${id}-fehler-${s}` : undefined });
 
   return (
     <form className="formular" onSubmit={absenden} noValidate>
       {onVerbuchen && (
         <>
-          <label htmlFor={`aenderung-${schluessel}`}>Betrag dazu oder weg</label>
+          <label htmlFor={`aenderung-${s}`}>Betrag dazu oder weg</label>
           <div className="plusminus">
             <button type="button" aria-label="Abziehen" onClick={() => verbuche(-1)}>
               −
             </button>
             <input
-              id={`aenderung-${schluessel}`}
+              {...feld('aenderung', !!fehler.aenderung)}
               ref={aenderungRef}
               value={aenderung}
               onChange={(e) => setAenderung(e.target.value)}
@@ -192,25 +267,34 @@ function Formular({ konto, onSichern, onVerbuchen, onAbbrechen, onLoeschen }: {
               inputMode="decimal"
               placeholder="0,00"
               autoComplete="off"
-              aria-invalid={!!fehler.aenderung}
-              aria-describedby={fehler.aenderung ? `aenderung-fehler-${schluessel}` : undefined}
             />
             <button type="button" aria-label="Dazurechnen" onClick={() => verbuche(1)}>
               +
             </button>
           </div>
-          {fehler.aenderung && <p className="fehler" id={`aenderung-fehler-${schluessel}`}>{fehler.aenderung}</p>}
+          {fehler.aenderung && <p className="fehler" id={`aenderung-fehler-${s}`}>{fehler.aenderung}</p>}
           <hr />
         </>
       )}
 
-      <label htmlFor={`name-${schluessel}`}>Name</label>
-      <input id={`name-${schluessel}`} ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} maxLength={60} autoComplete="off" aria-invalid={!!fehler.name} aria-describedby={fehler.name ? `name-fehler-${schluessel}` : undefined} />
-      {fehler.name && <p className="fehler" id={`name-fehler-${schluessel}`}>Bitte einen Namen eingeben.</p>}
+      <label htmlFor={`name-${s}`}>Name</label>
+      <input {...feld('name', fehler.name)} ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} maxLength={60} autoComplete="off" />
+      {fehler.name && <p className="fehler" id={`name-fehler-${s}`}>Bitte einen Namen eingeben.</p>}
 
-      <label htmlFor={`betrag-${schluessel}`}>Stand in Euro</label>
-      <input id={`betrag-${schluessel}`} ref={betragRef} value={betrag} onChange={(e) => setBetrag(e.target.value)} inputMode="decimal" placeholder="0,00" autoComplete="off" aria-invalid={!!fehler.betrag} aria-describedby={fehler.betrag ? `betrag-fehler-${schluessel}` : undefined} />
-      {fehler.betrag && <p className="fehler" id={`betrag-fehler-${schluessel}`}>Bitte einen Betrag wie 1.234,56 eingeben.</p>}
+      <label htmlFor={`betrag-${s}`}>{topf ? 'Gespart in Euro' : 'Stand in Euro'}</label>
+      <input {...feld('betrag', fehler.betrag)} ref={betragRef} value={betrag} onChange={(e) => setBetrag(e.target.value)} inputMode="decimal" placeholder="0,00" autoComplete="off" />
+      {fehler.betrag && <p className="fehler" id={`betrag-fehler-${s}`}>Bitte einen Betrag wie 1.234,56 eingeben.</p>}
+
+      {topf && (
+        <>
+          <label htmlFor={`ziel-${s}`}>Ziel in Euro (freiwillig)</label>
+          <input {...feld('ziel', fehler.ziel)} ref={zielRef} value={ziel} onChange={(e) => setZiel(e.target.value)} inputMode="decimal" placeholder="z. B. 1.500" autoComplete="off" />
+          {fehler.ziel && <p className="fehler" id={`ziel-fehler-${s}`}>Bitte ein Ziel über 0 wie 1.500 eingeben oder das Feld leer lassen.</p>}
+
+          <label htmlFor={`bis-${s}`}>Bis wann (freiwillig)</label>
+          <input id={`bis-${s}`} type="month" value={bis} onChange={(e) => setBis(e.target.value)} />
+        </>
+      )}
 
       <div className="knoepfe">
         {onLoeschen && (

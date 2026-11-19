@@ -7,11 +7,21 @@
 import Dexie, { type Table } from 'dexie';
 import type { Cent } from './geld';
 
-export interface Unterkonto {
+/** Gemeinsame Felder von Unterkonten und Spartöpfen. */
+export interface Eintrag {
   id: string;
   name: string;
   stand: Cent;
   reihenfolge: number;
+}
+
+export type Unterkonto = Eintrag;
+
+export interface Spartopf extends Eintrag {
+  /** Zielbetrag, null ohne Ziel. */
+  ziel: Cent | null;
+  /** Zielmonat "YYYY-MM", null ohne Datum. */
+  bis: string | null;
 }
 
 interface Alt {
@@ -41,12 +51,14 @@ export const neueId = () => crypto.randomUUID();
 
 export class AppDB extends Dexie {
   unterkonten!: Table<Unterkonto, string>;
+  spartoepfe!: Table<Spartopf, string>;
   meta!: Table<MetaEintrag, string>;
 
   constructor(name = 'fixkosten') {
     super(name);
     this.version(1).stores(TABELLEN_V1);
     this.version(2).stores({ unterkonten: 'id, reihenfolge' });
+    this.version(3).stores({ spartoepfe: 'id, reihenfolge' });
   }
 }
 
@@ -110,12 +122,13 @@ async function alteToepfe(d: AppDB): Promise<Unterkonto[]> {
   return liste.map((x, reihenfolge) => ({ id: neueId(), name: x.name, stand: x.stand, reihenfolge }));
 }
 
-export async function speichereUnterkonto(k: { id?: string; name: string; stand: Cent }, d: AppDB = db): Promise<string> {
-  return d.transaction('rw', d.unterkonten, async () => {
-    const alt = k.id ? await d.unterkonten.get(k.id) : undefined;
-    const letztes = await d.unterkonten.orderBy('reihenfolge').last();
-    const id = k.id ?? neueId();
-    await d.unterkonten.put({ id, name: k.name, stand: k.stand, reihenfolge: alt?.reihenfolge ?? (letztes ? letztes.reihenfolge + 1 : 0) });
+/** Neues hinten anhängen, Geändertes behält seinen Platz. Gibt die ID zurück. */
+export async function speichere<T extends Eintrag>(tabelle: Table<T, string>, e: Omit<T, 'id' | 'reihenfolge'> & { id?: string }): Promise<string> {
+  return tabelle.db.transaction('rw', tabelle, async () => {
+    const alt = e.id ? await tabelle.get(e.id) : undefined;
+    const letztes = await tabelle.orderBy('reihenfolge').last();
+    const id = e.id ?? neueId();
+    await tabelle.put({ ...e, id, reihenfolge: alt?.reihenfolge ?? (letztes ? letztes.reihenfolge + 1 : 0) } as T);
     return id;
   });
 }

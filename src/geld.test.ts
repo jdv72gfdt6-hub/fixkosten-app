@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { betragFuerEingabe, formatBetrag, parseBetrag } from './geld';
+import { betragFuerEingabe, formatBetrag, formatMonat, parseBetrag } from './geld';
 
 describe('Beträge', () => {
   it.each([
@@ -34,6 +34,13 @@ describe('Beträge', () => {
     expect(formatBetrag(5)).toBe('0,05 €');
     expect(formatBetrag(0)).toBe('0,00 €');
     expect(formatBetrag(-2550)).toBe('−25,50 €');
+  });
+
+  it('kurze Anzeige ohne ",00", Monate ausgeschrieben', () => {
+    expect(formatBetrag(150000, true)).toBe('1.500 €');
+    expect(formatBetrag(150050, true)).toBe('1.500,50 €');
+    expect(formatMonat('2027-06')).toBe('Juni 2027');
+    expect(formatMonat('2026-12')).toBe('Dezember 2026');
   });
 
   it('Eingabewert lässt sich wieder einlesen', () => {

@@ -9,6 +9,9 @@
   --akzent-flaeche: #007aff;
   --akzent-auf: #ffffff;
   --rot: #c4000f;
+  --gruen: #1f7a35;
+  --gruen-flaeche: #34c759;
+  --flaeche-2: #e5e5ea;
   --hinweis: #2c2c2e;
   --hinweis-text: #ffffff;
   --hinweis-akzent: #64b0ff;
@@ -24,6 +27,9 @@
     --akzent: #409cff;
     --akzent-flaeche: #0a84ff;
     --rot: #ff6961;
+    --gruen: #30d158;
+    --gruen-flaeche: #30d158;
+    --flaeche-2: #2c2c2e;
     --hinweis: #3a3a3c;
   }
 }
@@ -69,6 +75,28 @@ button {
   max-width: 640px;
   margin: 0 auto;
   padding: calc(env(safe-area-inset-top, 0px) + 32px) 16px calc(env(safe-area-inset-bottom, 0px) + 120px);
+}
+
+.umschalter {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  margin-bottom: 28px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--flaeche);
+}
+.umschalter button {
+  min-height: 40px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  color: var(--text-2);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+.umschalter button[aria-current='page'] {
+  background: var(--flaeche-2);
+  color: var(--text);
 }
 
 .kopf {
@@ -130,6 +158,39 @@ h1 {
   /* Kurze Namen bleiben neben dem Betrag, lange bekommen eine eigene Zeile. */
   flex: 0 1 auto;
   min-width: 0;
+}
+/* Fortschritt eines Spartopfs: eigene Zeile unter Name und Betrag. */
+.zeile-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 0 100%;
+  margin-top: 8px;
+}
+.balken {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--flaeche-2);
+  overflow: hidden;
+}
+.balken > span {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--akzent-flaeche);
+}
+.balken.voll > span {
+  background: var(--gruen-flaeche);
+}
+/* "bis Juni 2027" nicht mitten im Datum umbrechen */
+.am-stueck {
+  white-space: nowrap;
+}
+.erreicht {
+  color: var(--gruen);
+  font-size: 0.875rem;
+  font-weight: 600;
 }
 .zeile-betrag {
   margin-left: auto;

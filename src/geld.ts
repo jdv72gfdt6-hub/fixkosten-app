@@ -44,10 +44,19 @@ function teile(wert: Cent): { euro: string; cent: string } {
   return { euro: String(Math.floor(abs / 100)), cent: String(abs % 100).padStart(2, '0') };
 }
 
-/** Anzeige: "1.234,56 €" mit geschütztem Leerzeichen. */
-export function formatBetrag(wert: Cent): string {
+/** Anzeige: "1.234,56 €" mit geschütztem Leerzeichen. Mit `kurz` ohne ",00" bei glatten Beträgen. */
+export function formatBetrag(wert: Cent, kurz = false): string {
   const { euro, cent } = teile(wert);
-  return `${wert < 0 ? MINUS : ''}${euro.replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${cent}${NBSP}€`;
+  const nachkomma = kurz && cent === '00' ? '' : `,${cent}`;
+  return `${wert < 0 ? MINUS : ''}${euro.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}${nachkomma}${NBSP}€`;
+}
+
+const MONATE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+
+/** "2027-06" → "Juni 2027". */
+export function formatMonat(monat: string): string {
+  const [jahr, m] = monat.split('-');
+  return `${MONATE[Number(m) - 1] ?? m} ${jahr}`;
 }
 
 /** Vorbelegung eines Eingabefelds: "1234,56". */

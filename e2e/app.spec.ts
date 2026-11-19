@@ -51,14 +51,83 @@ async function pruefeLayout(page: Page) {
   expect(fehler).toEqual([]);
 }
 
-test('Eine einzige Seite: leer, ohne Tabs und ohne Einstellungen', async ({ page }) => {
+async function neuerTopf(page: Page, name: string, gespart: string, ziel = '', bis = '') {
+  await page.getByRole('button', { name: 'Spartopf hinzufügen' }).click();
+  await page.getByLabel('Name').fill(name);
+  await page.getByLabel('Gespart in Euro').fill(gespart);
+  await page.getByLabel('Ziel in Euro (freiwillig)').fill(ziel);
+  await page.getByLabel('Bis wann (freiwillig)').fill(bis);
+  await page.getByRole('button', { name: 'Sichern' }).click();
+  await expect(page.getByRole('button', { name: new RegExp(`^${name}`) })).toBeVisible();
+}
+
+const seite = (page: Page, name: 'Konto' | 'Spartöpfe') => page.getByRole('navigation', { name: 'Seiten' }).getByRole('button', { name }).click();
+const toepfe = (page: Page) => page.getByRole('list', { name: 'Spartöpfe' }).getByRole('button');
+
+test('Startseite: leer, nur Umschalter und Plus, ohne Einstellungen', async ({ page }) => {
   await oeffneLeer(page);
   await expect(summe(page)).toHaveText('0,00 €');
   await expect(page.getByText('Noch keine Unterkonten')).toBeVisible();
-  await expect(page.getByRole('navigation')).toHaveCount(0);
-  await expect(page.getByRole('button')).toHaveCount(1);
+  await expect(page.getByRole('button')).toHaveText(['Konto', 'Spartöpfe', '']);
+  await expect(page.getByRole('button', { name: 'Konto', exact: true })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByRole('button', { name: 'Unterkonto hinzufügen' })).toBeVisible();
   await expect(page.getByText('Es wird nichts gebucht')).toHaveCount(0);
+});
+
+test('Spartöpfe: eigene Seite mit Ziel, Datum und eigener Summe', async ({ page }) => {
+  await oeffneLeer(page);
+  await neu(page, 'Rücklagen', '1.000');
+  await seite(page, 'Spartöpfe');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Spartöpfe');
+  await expect(page.getByText('Noch keine Spartöpfe')).toBeVisible();
+  await expect(summe(page)).toHaveText('0,00 €');
+
+  await neuerTopf(page, 'Urlaub 2027', '640', '1.500', '2027-06');
+  await neuerTopf(page, 'Notgroschen', '1.000', '3.000');
+  await neuerTopf(page, 'Ohne Ziel', '50');
+  await expect(summe(page)).toHaveText('1.690,00 €');
+  await expect(page.locator('.kopf .klein')).toHaveText('Ziele zusammen 4.500 € · 36 % erreicht');
+  await expect(toepfe(page).nth(0)).toContainText('von 1.500 € · noch 860 € bis Juni 2027');
+  await expect(toepfe(page).nth(1)).toContainText('von 3.000 € · noch 2.000 €');
+  await expect(toepfe(page).nth(2)).not.toContainText('von');
+  await expect(page.getByText(/im Monat/)).toHaveCount(0);
+
+  // Ziel erreichen mit Plus
+  await toepfe(page).first().click();
+  await page.getByLabel('Betrag dazu oder weg').fill('860');
+  await page.getByRole('button', { name: 'Dazurechnen' }).click();
+  await expect(toepfe(page).first()).toContainText('✓ Ziel von 1.500 € erreicht');
+
+  // Die Konto-Seite bleibt unberührt, alles bleibt nach dem Neuladen
+  await seite(page, 'Konto');
+  await expect(summe(page)).toHaveText('1.000,00 €');
+  await page.reload();
+  await seite(page, 'Spartöpfe');
+  await expect(summe(page)).toHaveText('2.550,00 €');
+  await expect(toepfe(page)).toHaveCount(3);
+});
+
+test('Spartopf bearbeiten: Ziel und Datum ändern oder entfernen, falsches Ziel abgefangen', async ({ page }) => {
+  await oeffneLeer(page);
+  await seite(page, 'Spartöpfe');
+  await neuerTopf(page, 'Handy', '400', '1.000', '2027-03');
+  await toepfe(page).first().click();
+  await expect(page.getByLabel('Ziel in Euro (freiwillig)')).toHaveValue('1000,00');
+  await expect(page.getByLabel('Bis wann (freiwillig)')).toHaveValue('2027-03');
+  await page.getByLabel('Ziel in Euro (freiwillig)').fill('0');
+  await page.getByRole('button', { name: 'Sichern' }).click();
+  await expect(page.getByText('Bitte ein Ziel über 0')).toBeVisible();
+  await page.getByLabel('Ziel in Euro (freiwillig)').fill('');
+  await page.getByLabel('Bis wann (freiwillig)').fill('');
+  await page.getByRole('button', { name: 'Sichern' }).click();
+  await expect(toepfe(page).first()).toHaveText(/^Handy\s*400,00\s€$/);
+  await expect(page.locator('.kopf .klein')).toHaveText('Gesamtsumme');
+
+  await toepfe(page).first().click();
+  await page.getByRole('button', { name: 'Löschen' }).click();
+  await expect(page.getByText('Noch keine Spartöpfe')).toBeVisible();
+  await page.getByRole('button', { name: 'Rückgängig' }).click();
+  await expect(toepfe(page)).toHaveCount(1);
 });
 
 test('Plus und Minus: Betrag dazurechnen und abziehen, rückgängig machbar', async ({ page }) => {
@@ -218,6 +287,18 @@ for (const groesse of ['100%', '170%']) {
       await zeilen(page).first().click();
       await page.getByRole('button', { name: 'Löschen' }).click();
       await pruefeLayout(page);
+
+      await seite(page, 'Spartöpfe');
+      await pruefeLayout(page);
+      await neuerTopf(page, 'Urlaub 2027', '640', '1.500', '2027-06');
+      await neuerTopf(page, 'Donaudampfschifffahrtsgesellschaftskapitänsmütze', '123.456,78', '987.654,32', '2030-09');
+      await neuerTopf(page, 'Erreicht', '900', '900');
+      await neuerTopf(page, 'Nur Datum', '5', '', '2027-12');
+      await pruefeLayout(page);
+      await toepfe(page).first().click();
+      await page.getByLabel('Ziel in Euro (freiwillig)').fill('abc');
+      await page.getByRole('button', { name: 'Sichern' }).click(); // Fehlermeldung sichtbar
+      await pruefeLayout(page);
     });
   }
 }
@@ -259,5 +340,18 @@ for (const schema of ['light', 'dark'] as const) {
     await page.screenshot({ path: `screenshots/${schema}/5-grosse-schrift.png` });
     await zeilen(page).nth(1).click();
     await page.screenshot({ path: `screenshots/${schema}/6-grosse-schrift-bearbeiten.png`, fullPage: true });
+
+    await page.reload();
+    await seite(page, 'Spartöpfe');
+    await neuerTopf(page, 'Urlaub 2027', '640', '1.500', '2027-06');
+    await neuerTopf(page, 'Notgroschen', '1.000', '3.000');
+    await neuerTopf(page, 'Neues Handy', '400', '1.000', '2027-03');
+    await neuerTopf(page, 'Weihnachten', '900', '900');
+    await page.screenshot({ path: `screenshots/${schema}/7-spartoepfe.png` });
+    await toepfe(page).first().click();
+    await page.screenshot({ path: `screenshots/${schema}/8-spartopf-bearbeiten.png`, fullPage: true });
+    await page.getByRole('button', { name: 'Abbrechen' }).click();
+    await page.addStyleTag({ content: 'html { font-size: 170% !important; }' });
+    await page.screenshot({ path: `screenshots/${schema}/9-spartoepfe-grosse-schrift.png`, fullPage: true });
   });
 }

@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import Dexie from 'dexie';
 import { describe, expect, it } from 'vitest';
-import { AppDB, speichereUnterkonto, TABELLEN_V1, uebernehmeAlteDaten } from './db';
+import { AppDB, speichere, TABELLEN_V1, uebernehmeAlteDaten } from './db';
 
 let nummer = 0;
 
@@ -105,13 +105,22 @@ describe('Übernahme aus der früheren App', () => {
   });
 });
 
-describe('Unterkonten', () => {
+describe('Speichern', () => {
   it('hängt neue Unterkonten hinten an, Ändern behält die Reihenfolge', async () => {
     const d = await alteApp({});
-    const a = await speichereUnterkonto({ name: 'A', stand: 100 }, d);
-    await speichereUnterkonto({ name: 'B', stand: 200 }, d);
-    await speichereUnterkonto({ id: a, name: 'A2', stand: 300 }, d);
+    const a = await speichere(d.unterkonten, { name: 'A', stand: 100 });
+    await speichere(d.unterkonten, { name: 'B', stand: 200 });
+    await speichere(d.unterkonten, { id: a, name: 'A2', stand: 300 });
     expect(await namenUndStaende(d)).toEqual([['A2', 300], ['B', 200]]);
+    d.close();
+  });
+
+  it('Spartöpfe liegen in einer eigenen Tabelle, Ziel und Datum bleiben erhalten', async () => {
+    const d = await alteApp({});
+    await speichere(d.unterkonten, { name: 'Konto', stand: 100 });
+    const id = await speichere(d.spartoepfe, { name: 'Urlaub', stand: 64000, ziel: 150000, bis: '2027-06' });
+    expect(await d.spartoepfe.get(id)).toEqual({ id, name: 'Urlaub', stand: 64000, ziel: 150000, bis: '2027-06', reihenfolge: 0 });
+    expect(await d.unterkonten.count()).toBe(1);
     d.close();
   });
 });
